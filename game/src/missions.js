@@ -1,0 +1,68 @@
+// The route board's six sorties, their objectives and the scoring behind the postcard: land, drop
+import{STRIPS}from"./terrain.js";export const RINGS={tamsen:{x:430,y:660,z:-880,radius:40,label:"UPPER TAMSEN"},maru:{x:1860,y:442,z:160,radius:40,label:"MARU"
+},nimra:{x:-1700,y:606,z:260,radius:40,label:"NIMRA"},bridge:{x:2020,y:430,z:520,radius:40,label:"BROKEN BRIDGE"}};export const GATES=[{x:-60,y:930,z:-2050,
+radius:90,label:"GATE 1 · RIVER BEND"},{x:260,y:1020,z:-2280,radius:90,label:"GATE 2 · DZONG SPUR"},{x:560,y:1110,z:-2500,radius:90,label:"GATE 3 · PASS HEAD"
+},{x:180,y:980,z:-2650,radius:90,label:"GATE 4 · NORTH WALL"}];export const MISSIONS=[{id:1,code:"SORTIE 01",name:"First Light Mail",weather:"CLEAR",dawn:.9,
+night:0,start:"suli",fuelPct:.7,cargo:120,par:420,
+brief:"The pass is still open. Land at Tamsen Ridge, put two sacks on the strip, then bring KP-04 home to Suli before the valley fog lifts.",
+weatherLine:"dawn, clear, light westerly · ceiling 4,000 m",objectives:[{type:"land",strip:"tamsen",label:"LAND TAMSEN 27",detail:"land, 620 m ridge strip"},{
+type:"land",strip:"suli",label:"RETURN SULI 27",detail:"land at home"}],gold:128,silver:96,bronze:64},{id:2,code:"SORTIE 02",name:"The Tea Drop",weather:"GUST",
+dawn:.2,night:0,start:"suli",fuelPct:.85,cargo:120,par:480,
+brief:"Three sacks for the tea pickers. No landing: fly the ring at Upper Tamsen, then Maru, then Nimra, and hold the bank while the gust pushes you off the line.",
+weatherLine:"noon, gust 6 m/s from 240 · good visibility",objectives:[{type:"drop",ring:"tamsen",label:"DROP · UPPER TAMSEN",detail:"ring 40 m"},{type:"drop",
+ring:"maru",label:"DROP · MARU",detail:"ring 40 m"},{type:"drop",ring:"nimra",label:"DROP · NIMRA",detail:"ring 40 m"}],gold:120,silver:90,bronze:60},{id:3,
+code:"SORTIE 03",name:"Doctor for Nimra",weather:"GUST",dawn:.1,night:0,start:"suli",fuelPct:.8,cargo:40,par:480,
+brief:"A doctor and an 80 kg patient wait at Nimra Kot. The strip is 420 m, one-way, and the crosswind is 9 m/s. Land uphill, take the patient, and return to Suli heavier than you left.",
+weatherLine:"crosswind 9 m/s from 230 · strip 420 m, one-way uphill",objectives:[{type:"land",strip:"nimra",label:"LAND NIMRA KOT 27",detail:"420 m, one-way"},{
+type:"land",strip:"suli",label:"RETURN SULI 27",detail:"patient aboard, +80 kg"}],gold:122,silver:92,bronze:62},{id:4,code:"SORTIE 04",name:"The Broken Bridge",
+weather:"SQUALL",dawn:.05,night:0,start:"suli",fuelPct:.9,cargo:120,par:420,
+brief:"Four crates for the road crew at the broken bridge. The lee of Maru ridge throws a downdraft across the drop line; come in high, bank hard, and do not chase a missed ring.",
+weatherLine:"squall building, 9 m/s, lee downdrafts",objectives:[{type:"drop",ring:"bridge",label:"CRATE 1 · BROKEN BRIDGE",detail:"ring 40 m"},{type:"drop",
+ring:"bridge",label:"CRATE 2 · BROKEN BRIDGE",detail:"ring 40 m"},{type:"drop",ring:"bridge",label:"CRATE 3 · BROKEN BRIDGE",detail:"ring 40 m"},{type:"drop",
+ring:"bridge",label:"CRATE 4 · BROKEN BRIDGE",detail:"ring 40 m"}],gold:118,silver:88,bronze:58},{id:5,code:"SORTIE 05",name:"Eyes on the Pass",
+weather:"SQUALL",dawn:.15,night:0,start:"suli",fuelPct:.75,cargo:20,par:540,
+brief:"Four photographs of the pass before the cloud shuts it. The gates sit at 3,000 to 3,600 ft; climb early, keep the speed up, and watch the fuel burn on the way home.",
+weatherLine:"cloud base 2,700 m · 9 m/s · no landing before Suli",objectives:[{type:"gate",gate:0,label:"GATE 1 · RIVER BEND",detail:"fly through the ring"},{
+type:"gate",gate:1,label:"GATE 2 · DZONG SPUR",detail:"fly through the ring"},{type:"gate",gate:2,label:"GATE 3 · PASS HEAD",detail:"fly through the ring"},{
+type:"gate",gate:3,label:"GATE 4 · NORTH WALL",detail:"fly through the ring"}],gold:118,silver:88,bronze:58},{id:6,code:"SORTIE 06",
+name:"Last Mail Before the Rain",weather:"STORM",dawn:0,night:.85,start:"suli",fuelPct:.55,cargo:120,par:480,
+brief:"The last two sacks before the pass closes for four months. Drop at Maru and Nimra, then land at Suli on the lights in a 12 m/s crosswind. There is no alternate.",
+weatherLine:"storm wall 2.5 km · 12 m/s · night landing",objectives:[{type:"drop",ring:"maru",label:"DROP · MARU",detail:"ring 40 m"},{type:"drop",ring:"nimra",
+label:"DROP · NIMRA",detail:"ring 40 m"},{type:"land",strip:"suli",label:"LAND SULI ON THE LIGHTS",detail:"night, crosswind"}],gold:120,silver:90,bronze:60}]
+;function ringFor(name){return RINGS[name]??RINGS.tamsen}function stripFor(id){return STRIPS.find(strip=>strip.id===id)??STRIPS[0]}
+export function createSortie(mission){const objectives=mission.objectives.map(objective=>({...objective,done:false,score:0,tries:0,
+ring:objective.ring?ringFor(objective.ring):null,gate:objective.gate!==undefined?GATES[objective.gate]:null,strip:objective.strip?stripFor(objective.strip):null
+}));return{mission:mission,objectives:objectives,index:0,time:0,sacks:[],objectiveScores:[],finished:false,result:null,cargo:mission.cargo,target:null,
+message:"",messageTimer:0,legStart:0,touchdown:null,drops:0}}export function targetInfo(sortie){const objective=sortie.objectives[sortie.index]
+;if(!objective)return null;if(objective.type==="drop"||objective.type==="gate"){const ring=objective.ring??objective.gate;return{kind:objective.type,x:ring.x,
+y:ring.y,z:ring.z,radius:ring.radius,label:ring.label}}const strip=objective.strip;return{kind:"land",x:strip.x+strip.length/2-40,y:strip.elev+2,z:strip.z,
+radius:24,label:`${strip.name.toUpperCase()} 27`,strip:strip}}export function tryDrop(sortie,flight){const objective=sortie.objectives[sortie.index]
+;if(!objective||objective.type!=="drop"||sortie.cargo<=0)return false;const target=objective.ring;sortie.cargo=Math.max(0,sortie.cargo-30);sortie.drops+=1
+;sortie.sacks.push({p:{x:flight.p.x,y:flight.p.y-1.4,z:flight.p.z},v:{x:flight.v.x*.94,y:flight.v.y-1.2,z:flight.v.z*.94},age:0,target:target,evaluated:false,
+accuracy:0,landed:false});return true}function evaluateSack(sortie,sack){const dx=sack.p.x-sack.target.x;const dy=sack.p.y-sack.target.y
+;const dz=sack.p.z-sack.target.z;const distance=Math.sqrt(dx*dx+dz*dz+dy*dy*.15);sack.accuracy=Math.round(100*Math.max(0,1-distance/sack.target.radius)**1.5)
+;sack.distance=distance;sack.evaluated=true;const objective=sortie.objectives[sortie.index];if(objective&&objective.type==="drop"&&!objective.done){
+objective.tries+=1;objective.done=true;objective.score=sack.accuracy;sortie.objectiveScores.push({label:objective.label,points:sack.accuracy,
+note:`${Math.round(distance)} m from the ring`});sortie.message=sack.accuracy>70?"ON THE MARK":sack.accuracy>35?"NEAR ENOUGH":"WIDE";sortie.messageTimer=2.5
+;sortie.index+=1;sortie.legStart=sortie.time}}export function updateObjectives(sortie,flight,dt,contact=null,groundHeight=null){if(sortie.finished)return true
+;sortie.time+=dt;if(sortie.messageTimer>0)sortie.messageTimer-=dt;for(const sack of sortie.sacks){if(sack.evaluated)continue;sack.age+=dt;sack.v.y-=9.81*dt
+;sack.p.x+=sack.v.x*dt;sack.p.y+=sack.v.y*dt;sack.p.z+=sack.v.z*dt;const ground=groundHeight?groundHeight(sack.p.x,sack.p.z):0;if(sack.p.y<=ground+.3){
+sack.p.y=ground+.3;sack.landed=true}if(sack.landed||sack.age>8)evaluateSack(sortie,sack)}const objective=sortie.objectives[sortie.index];if(!objective){
+completeSortie(sortie,flight);return true}if(objective.type==="gate"){const gate=objective.gate;const dx=flight.p.x-gate.x;const dy=flight.p.y-gate.y
+;const dz=flight.p.z-gate.z;if(dx*dx+dy*dy+dz*dz<gate.radius*gate.radius){objective.done=true;objective.score=100;sortie.objectiveScores.push({
+label:objective.label,points:100,note:"through the gate"});sortie.message="PHOTOGRAPHED";sortie.messageTimer=2;sortie.index+=1;sortie.legStart=sortie.time}
+}else if(objective.type==="land"&&contact){const strip=objective.strip;if(contact.strip&&contact.strip.id===strip.id&&contact.grade.grade!=="CRASH"){
+objective.done=true;objective.score=contact.grade.points;sortie.objectiveScores.push({label:objective.label,points:contact.grade.points,
+note:contact.grade.grade.toLowerCase()});sortie.touchdown=contact;sortie.message=contact.grade.grade;sortie.messageTimer=2.5;sortie.index+=1
+;sortie.legStart=sortie.time;if(sortie.mission.id===3&&sortie.index===1){flight.cargo+=80;sortie.cargo=flight.cargo;sortie.cargoNote="+80 KG PATIENT"}if(objective.strip.id!=="suli"){
+sortie.stopStrip=strip}}}sortie.target=targetInfo(sortie);if(!objective.done&&objective.type==="land"&&flight.crashed){completeSortie(sortie,flight)}
+return sortie.finished}function completeSortie(sortie,flight){sortie.finished=true;sortie.result=scoreSortie(sortie,flight)}
+export function scoreSortie(sortie,flight){let objectiveTotal=0;for(const item of sortie.objectiveScores)objectiveTotal+=item.points
+;const objectiveScore=sortie.objectiveScores.length>0?objectiveTotal/sortie.objectiveScores.length:0;const timeLeft=Math.max(0,sortie.mission.par-sortie.time)
+;const timeBonus=30*(timeLeft/sortie.mission.par);const fuelBonus=20*(flight.fuel/Math.max(1,flight.fuelStart))
+;const damagePenalty=.8*(100-(flight.damage.engine+flight.damage.leftWing+flight.damage.rightWing+flight.damage.tail+flight.damage.gear+flight.damage.tank)/6)
+;const total=Math.max(0,objectiveScore+timeBonus+fuelBonus-damagePenalty);const{gold:gold,silver:silver,bronze:bronze}=sortie.mission
+;const grade=total>=gold?"GOLD":total>=silver?"SILVER":total>=bronze?"BRONZE":"NONE";return{objectiveScore:objectiveScore,timeBonus:timeBonus,
+fuelBonus:fuelBonus,damagePenalty:damagePenalty,total:total,grade:grade,
+postmark:grade==="GOLD"?"GOLD":grade==="SILVER"?"SILVER":grade==="BRONZE"?"BRONZE":"RETURNED"}}export function contactStrip(contact){return contact?.strip??null
+}

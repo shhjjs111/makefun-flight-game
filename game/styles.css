@@ -1,0 +1,46 @@
+/* The stage: two stacked 1280x800 canvases in a 16:10 letterbox. Everything else is the game. */
+html, body {
+margin: 0;
+height: 100%;
+overflow: hidden;
+background: #141817;
+color: #f6ebd2;
+font-family: "Consolas", "Courier New", monospace;
+}
+body {
+display: flex;
+align-items: center;
+justify-content: center;
+cursor: none;
+user-select: none;
+}
+#stage {
+position: relative;
+}
+#world, #hud {
+position: fixed;
+inset: 0;
+margin: auto;
+width: 1280px;
+height: 800px;
+display: block;
+}
+#world {
+image-rendering: auto;
+background: #3f5e6b;
+}
+#hud {
+pointer-events: none;
+}
+@media (max-aspect-ratio: 16/10) {
+#world, #hud {
+width: 100vw;
+height: 62.5vw;
+}
+}
+@media (min-aspect-ratio: 16/10) {
+#world, #hud {
+height: 100vh;
+width: 160vh;
+}
+}

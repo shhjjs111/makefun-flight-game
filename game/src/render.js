@@ -1,141 +1,76 @@
-// Drawing only: the world's state and the current screen in, pixels out. The 1280x720 playfield
-// is scaled to fit the window and centred, the margin filled with the backdrop colour. Flat
-// rectangles and circles, canvas text for the HUD and the panels. Text that holds a number is
-// rebuilt only when the number changes, so a frame allocates nothing.
-import { FIELD, FONT, LIVES, PALETTE } from './config.js';
-import { KIND_COIN } from './world.js';
+// The WebGL2 frame: two shader programs (world, sky) and one cloud billboard program, a handful
+import{mat4Multiply,mat4Perspective,mat4LookAt,vnorm,vcross}from"./util.js"
+;const WORLD_VS=`#version 300 es\nlayout(location=0) in vec3 aPos;\nlayout(location=1) in vec3 aNormal;\nlayout(location=2) in vec3 aColor;\nuniform mat4 uViewProj;\nuniform mat4 uModel;\nout vec3 vNormal;\nout vec3 vWorld;\nout vec3 vColor;\nvoid main() {\nvec4 wp = uModel * vec4(aPos, 1.0);\nvWorld = wp.xyz;\nvNormal = mat3(uModel) * aNormal;\nvColor = aColor;\ngl_Position = uViewProj * wp;\n}`
 
-export const SCREEN_TITLE = 'title';
-export const SCREEN_PLAY = 'play';
-export const SCREEN_PAUSED = 'paused';
-export const SCREEN_OVER = 'over';
+;const WORLD_FS=`#version 300 es\nprecision highp float;\nin vec3 vNormal;\nin vec3 vWorld;\nin vec3 vColor;\nuniform vec3 uSunDir;\nuniform vec3 uFogColor;\nuniform vec3 uCamPos;\nuniform float uFogDensity;\nuniform float uStorm;\nuniform float uNight;\nuniform float uAlpha;\nout vec4 outColor;\nvoid main() {\nvec3 n = normalize(vNormal);\nfloat ndl = max(dot(n, uSunDir), 0.0);\nfloat light = 0.30 + 0.70 * ndl;\nfloat band = floor(light * 4.0 + 0.5) / 4.0;\nvec3 cool = vec3(0.55, 0.61, 0.65);\nvec3 warm = vec3(1.08, 1.0, 0.88);\nvec3 col = vColor * mix(cool, warm, band) * (0.78 + 0.22 * band);\nfloat h = vWorld.y / 25.0;\nfloat f = abs(fract(h + 0.5) - 0.5);\nfloat w = max(fwidth(h), 0.0008);\nfloat line = 1.0 - smoothstep(0.0, w * 1.6, f);\ncol *= 1.0 - 0.10 * line;\nfloat d = length(vWorld - uCamPos);\nfloat fog = 1.0 - exp(-d * uFogDensity);\ncol = mix(col, uFogColor, clamp(fog, 0.0, 0.94));\ncol *= mix(1.0, 0.72, uStorm);\ncol *= mix(1.0, 0.55, uNight);\noutColor = vec4(col, uAlpha);\n}`
+;const SKY_VS=`#version 300 es\nlayout(location=0) in vec2 aPos;\nout vec2 vNdc;\nvoid main() {\nvNdc = aPos;\ngl_Position = vec4(aPos, 0.9999, 1.0);\n}`
+;const SKY_FS=`#version 300 es\nprecision highp float;\nin vec2 vNdc;\nuniform vec2 uResolution;\nuniform vec3 uFwd;\nuniform vec3 uRight;\nuniform vec3 uUp;\nuniform vec3 uCamPos;\nuniform vec3 uSunDir;\nuniform vec3 uFog;\nuniform float uTanHalf;\nuniform float uAspect;\nuniform float uStorm;\nuniform float uDawn;\nuniform float uNight;\nuniform float uTime;\nout vec4 outColor;\nfloat hash(vec2 p) {\np = fract(p * vec2(123.34, 456.21));\np += dot(p, p + 45.32);\nreturn fract(p.x * p.y);\n}\nfloat noise(vec2 p) {\nvec2 i = floor(p);\nvec2 f = fract(p);\nf = f * f * (3.0 - 2.0 * f);\nreturn mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\nfloat s = 0.0;\nfloat a = 0.5;\nfor (int i = 0; i < 5; i++) {\ns += noise(p) * a;\np = p * 2.03 + vec2(17.1, -9.7);\na *= 0.5;\n}\nreturn s;\n}\nvoid main() {\nvec2 ndc = vNdc;\nvec3 dir = normalize(uFwd + uRight * ndc.x * uTanHalf * uAspect + uUp * ndc.y * uTanHalf);\nfloat h = dir.y;\nvec3 dawnHorizon = vec3(0.949, 0.788, 0.627);\nvec3 dawnMid = vec3(0.561, 0.639, 0.627);\nvec3 dawnZenith = vec3(0.247, 0.369, 0.420);\nvec3 dayHorizon = vec3(0.780, 0.810, 0.760);\nvec3 dayZenith = vec3(0.310, 0.480, 0.570);\nvec3 stormHorizon = vec3(0.557, 0.604, 0.557);\nvec3 stormZenith = vec3(0.141, 0.196, 0.200);\nvec3 nightHorizon = vec3(0.090, 0.120, 0.150);\nvec3 nightZenith = vec3(0.020, 0.035, 0.060);\nvec3 horizon = mix(mix(dawnHorizon, dayHorizon, 1.0 - uDawn), stormHorizon, uStorm);\nvec3 zenith = mix(mix(dawnZenith, dayZenith, 1.0 - uDawn), stormZenith, uStorm);\nhorizon = mix(horizon, nightHorizon, uNight);\nzenith = mix(zenith, nightZenith, uNight);\nvec3 col = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.55));\ncol = mix(col, dawnMid, exp(-abs(h) * 6.0) * 0.25 * (1.0 - uStorm));\nfloat sun = max(dot(dir, uSunDir), 0.0);\nvec3 sunColor = mix(vec3(1.0, 0.93, 0.80), vec3(1.0, 0.66, 0.34), uDawn);\ncol += sunColor * (pow(sun, 900.0) * 1.6 + pow(sun, 14.0) * 0.24) * (1.0 - uStorm * 0.85) * (1.0 - uNight);\nif (dir.y > 0.015) {\nvec2 p1 = uCamPos.xz + dir.xz * (1250.0 / dir.y);\nfloat n1 = fbm(p1 * 0.00052 + vec2(uTime * 0.004, uTime * 0.0015));\nfloat cover = mix(0.54, 0.20, uStorm);\nfloat c1 = smoothstep(cover, cover + 0.20, n1);\nvec2 p2 = uCamPos.xz + dir.xz * (2500.0 / dir.y);\nfloat n2 = fbm(p2 * 0.00033 - vec2(uTime * 0.002, 0.0));\nfloat c2 = smoothstep(0.58, 0.78, n2) * 0.55;\nvec3 cloudLit = mix(vec3(1.0, 0.94, 0.84), vec3(0.95, 0.55, 0.35), uDawn);\nvec3 cloudDark = mix(vec3(0.62, 0.68, 0.70), vec3(0.20, 0.24, 0.24), uStorm);\nvec3 cc = mix(cloudDark, cloudLit, clamp(sun * 2.2, 0.0, 1.0));\ncc *= mix(1.0, 0.45, uNight);\ncol = mix(col, cc, c1 * (0.85 + 0.13 * uStorm));\ncol = mix(col, cc * 0.82, c2);\n}\nif (uStorm > 0.15) {\nfloat band = smoothstep(0.24, 0.0, abs(dir.y - 0.015));\nfloat wall = fbm(vec2(atan(dir.z, dir.x) * 2.6, dir.y * 20.0 + uTime * 0.03));\nvec3 wallColor = mix(vec3(0.30, 0.34, 0.34), vec3(0.56, 0.57, 0.53), wall);\ncol = mix(col, wallColor, band * uStorm * 0.55);\n}\ncol = mix(col, uFog, smoothstep(0.11, -0.04, h));\noutColor = vec4(col, 1.0);\n}`
 
-/** The panel's width; its height grows with its lines: room for the title, the lines and the prompt. */
-const PANEL = { width: 600, top: 134, line: 34, bottom: 70 };
-const LIFE_SIZE = 20;
-const LIFE_GAP = 8;
+;const CLOUD_VS=`#version 300 es\nlayout(location=0) in vec3 aCenter;\nlayout(location=1) in vec2 aCorner;\nlayout(location=2) in float aSize;\nlayout(location=3) in float aAlpha;\nuniform mat4 uViewProj;\nuniform vec3 uCamRight;\nuniform vec3 uCamUp;\nuniform vec3 uCamPos;\nuniform float uStorm;\nout vec2 vUv;\nout float vAlpha;\nout float vDepth;\nvoid main() {\nvec3 wp = aCenter + uCamRight * aCorner.x * aSize + uCamUp * aCorner.y * aSize * 0.42;\nvUv = aCorner * 0.5 + 0.5;\nvAlpha = aAlpha * (0.55 + 0.45 * uStorm);\nvDepth = length(wp - uCamPos);\ngl_Position = uViewProj * vec4(wp, 1.0);\n}`
 
-function cachedLabel(prefix) {
-  let value = -1;
-  let text = '';
-  return function label(next) {
-    if (next !== value) {
-      value = next;
-      text = prefix + next;
-    }
-    return text;
-  };
-}
-
-export function createRenderer(canvas) {
-  const context = canvas.getContext('2d');
-  const view = { scale: 1, x: 0, y: 0 };
-  const scoreLabel = cachedLabel('Score ');
-  const levelLabel = cachedLabel('Level ');
-  const finalLabel = cachedLabel('Score ');
-  const bestLabel = cachedLabel('Best ');
-
-  function resize() {
-    const ratio = window.devicePixelRatio || 1;
-    const width = Math.round(window.innerWidth * ratio);
-    const height = Math.round(window.innerHeight * ratio);
-    canvas.width = width;
-    canvas.height = height;
-    view.scale = Math.min(width / FIELD.width, height / FIELD.height);
-    view.x = (width - FIELD.width * view.scale) / 2;
-    view.y = (height - FIELD.height * view.scale) / 2;
-  }
-
-  const fonts = new Map();
-  function text(value, x, y, size, color, align) {
-    if (!fonts.has(size)) fonts.set(size, `${size}px ${FONT}`);
-    context.font = fonts.get(size);
-    context.fillStyle = color;
-    context.textAlign = align;
-    context.fillText(value, x, y);
-  }
-
-  function drawField(state) {
-    context.fillStyle = PALETTE.sky;
-    context.fillRect(0, 0, FIELD.width, FIELD.height);
-    context.fillStyle = PALETTE.ground;
-    context.fillRect(0, FIELD.groundY, FIELD.width, FIELD.height - FIELD.groundY);
-
-    const items = state.items;
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      if (item.kind === KIND_COIN) {
-        context.fillStyle = PALETTE.coin;
-        context.beginPath();
-        context.arc(item.x + item.width / 2, item.y + item.height / 2, item.width / 2, 0, Math.PI * 2);
-        context.fill();
-      } else {
-        context.fillStyle = PALETTE.block;
-        context.fillRect(item.x, item.y, item.width, item.height);
-      }
-    }
-
-    const player = state.player;
-    // Blink while invulnerable after a hit: hidden on every other tenth of a second.
-    if (player.invulnerable === 0 || Math.floor(player.invulnerable * 10) % 2 === 1) {
-      context.fillStyle = PALETTE.player;
-      context.fillRect(player.x, player.y, player.width, player.height);
-    }
-  }
-
-  function drawHud(state) {
-    context.textBaseline = 'top';
-    text(scoreLabel(state.score), 24, 20, 28, PALETTE.text, 'left');
-    text(levelLabel(state.level), FIELD.width / 2, 20, 28, PALETTE.text, 'center');
-    const firstLife = FIELD.width - 24 - LIVES * (LIFE_SIZE + LIFE_GAP) + LIFE_GAP;
-    text('Lives', firstLife - 12, 20, 28, PALETTE.text, 'right');
-    for (let life = 0; life < LIVES; life += 1) {
-      context.fillStyle = life < state.lives ? PALETTE.player : PALETTE.ground;
-      context.fillRect(firstLife + life * (LIFE_SIZE + LIFE_GAP), 24, LIFE_SIZE, LIFE_SIZE);
-    }
-  }
-
-  function drawPanel(title, lines, prompt) {
-    const height = PANEL.top + lines.length * PANEL.line + PANEL.bottom;
-    const x = (FIELD.width - PANEL.width) / 2;
-    const y = (FIELD.height - height) / 2;
-    context.fillStyle = PALETTE.panel;
-    context.fillRect(x, y, PANEL.width, height);
-    context.textBaseline = 'alphabetic';
-    text(title, FIELD.width / 2, y + 78, 48, PALETTE.text, 'center');
-    for (let index = 0; index < lines.length; index += 1) {
-      text(lines[index], FIELD.width / 2, y + PANEL.top + index * PANEL.line, 22, PALETTE.muted, 'center');
-    }
-    text(prompt, FIELD.width / 2, y + height - 40, 24, PALETTE.coin, 'center');
-  }
-
-  const TITLE_LINES = ['Dodge the red blocks. Catch the gold coins.', 'Move with ← → or A D.  Pause with P.', ''];
-  const PAUSED_LINES = ['The blocks will wait for you.'];
-  const OVER_LINES = ['', ''];
-
-  /** Paint one frame: the field, then the HUD or a panel for the screen the game is on. */
-  function draw(state, screen, best) {
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = PALETTE.backdrop;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.setTransform(view.scale, 0, 0, view.scale, view.x, view.y);
-    drawField(state);
-    if (screen === SCREEN_TITLE) {
-      TITLE_LINES[2] = bestLabel(best);
-      drawPanel('Block Dodger', TITLE_LINES, 'Press Space or click to start');
-      return;
-    }
-    drawHud(state);
-    if (screen === SCREEN_PAUSED) drawPanel('Paused', PAUSED_LINES, 'Press P to resume');
-    else if (screen === SCREEN_OVER) {
-      OVER_LINES[0] = finalLabel(state.score);
-      OVER_LINES[1] = bestLabel(best);
-      drawPanel('Game over', OVER_LINES, 'Press Space or click to play again');
-    }
-  }
-
-  resize();
-  window.addEventListener('resize', resize);
-  return { draw };
-}
+;const CLOUD_FS=`#version 300 es\nprecision highp float;\nin vec2 vUv;\nin float vAlpha;\nin float vDepth;\nuniform sampler2D uTex;\nuniform vec3 uFog;\nuniform float uStorm;\nuniform float uDawn;\nuniform float uNight;\nout vec4 outColor;\nvoid main() {\nvec4 tex = texture(uTex, vUv);\nfloat a = tex.a * vAlpha * smoothstep(12000.0, 3500.0, vDepth);\nvec3 col = mix(vec3(1.0, 0.96, 0.90), vec3(0.96, 0.58, 0.40), uDawn);\ncol = mix(col, vec3(0.42, 0.46, 0.46), uStorm * 0.8);\ncol *= mix(1.0, 0.4, uNight);\noutColor = vec4(col, a);\n}`
+;function compile(gl,type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader)
+;if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){throw new Error(`shader: ${gl.getShaderInfoLog(shader)}`)}return shader}function program(gl,vs,fs){
+const p=gl.createProgram();gl.attachShader(p,compile(gl,gl.VERTEX_SHADER,vs));gl.attachShader(p,compile(gl,gl.FRAGMENT_SHADER,fs));gl.linkProgram(p)
+;if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(`link: ${gl.getProgramInfoLog(p)}`);return p}function cloudTexture(){
+const canvas=document.createElement("canvas");canvas.width=128;canvas.height=128;const ctx=canvas.getContext("2d")
+;const gradient=ctx.createRadialGradient(64,64,6,64,64,62);gradient.addColorStop(0,"rgba(255,255,255,0.95)");gradient.addColorStop(.55,"rgba(255,255,255,0.55)")
+;gradient.addColorStop(1,"rgba(255,255,255,0)");ctx.fillStyle=gradient;ctx.fillRect(0,0,128,128);for(let i=0;i<14;i+=1){const x=26+i*37%76;const y=44+i*23%40
+;const r=10+i%4*5;const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(255,255,255,0.34)");g.addColorStop(1,"rgba(255,255,255,0)")
+;ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}return canvas}export function createRenderer(canvas){const gl=canvas.getContext("webgl2",{antialias:true,
+alpha:false,powerPreference:"high-performance"});if(!gl)throw new Error("WebGL2 is required");const worldProgram=program(gl,WORLD_VS,WORLD_FS)
+;const skyProgram=program(gl,SKY_VS,SKY_FS);const cloudProgram=program(gl,CLOUD_VS,CLOUD_FS);const worldU={}
+;for(const name of["uViewProj","uModel","uSunDir","uFogColor","uCamPos","uFogDensity","uStorm","uNight","uAlpha"]){
+worldU[name]=gl.getUniformLocation(worldProgram,name)}const skyU={}
+;for(const name of["uResolution","uFwd","uRight","uUp","uCamPos","uSunDir","uFog","uTanHalf","uAspect","uStorm","uDawn","uNight","uTime"]){
+skyU[name]=gl.getUniformLocation(skyProgram,name)}const cloudU={}
+;for(const name of["uViewProj","uCamRight","uCamUp","uCamPos","uStorm","uTex","uFog","uDawn","uNight"]){cloudU[name]=gl.getUniformLocation(cloudProgram,name)}
+const skyVao=gl.createVertexArray();gl.bindVertexArray(skyVao);const skyBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,skyBuffer)
+;gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0)
+;const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cloudTexture())
+;gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR)
+;gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)
+;function uploadMesh(vertices){const vao=gl.createVertexArray();gl.bindVertexArray(vao);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer)
+;gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,36,0)
+;gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,36,12);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,3,gl.FLOAT,false,36,24)
+;return{vao:vao,count:vertices.length/9}}const cloudVao=gl.createVertexArray();const cloudBuffer=gl.createBuffer();const particleVao=gl.createVertexArray()
+;const particleBuffer=gl.createBuffer();function drawParticles(vertices){gl.bindVertexArray(particleVao);gl.bindBuffer(gl.ARRAY_BUFFER,particleBuffer)
+;gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.DYNAMIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,36,0)
+;gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,36,12);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,3,gl.FLOAT,false,36,24)
+;gl.drawArrays(gl.TRIANGLES,0,vertices.length/9)}function uploadClouds(clouds){const data=[];for(const cloud of clouds){
+const corners=[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];for(const[cx,cy]of corners)data.push(cloud.x,cloud.y,cloud.z,cx,cy,cloud.size,cloud.alpha)}
+gl.bindVertexArray(cloudVao);gl.bindBuffer(gl.ARRAY_BUFFER,cloudBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW)
+;gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,28,12)
+;gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,1,gl.FLOAT,false,28,20);gl.enableVertexAttribArray(3);gl.vertexAttribPointer(3,1,gl.FLOAT,false,28,24)}
+function resize(width,height){canvas.width=width;canvas.height=height;gl.viewport(0,0,width,height)}function drawWorldMesh(mesh,model,alpha=1,night=0){
+if(!mesh)return;gl.uniformMatrix4fv(worldU.uModel,false,model);gl.uniform1f(worldU.uAlpha,alpha);gl.uniform1f(worldU.uNight,night);gl.bindVertexArray(mesh.vao)
+;gl.drawArrays(gl.TRIANGLES,0,mesh.count)}function drawFrame(frame){const{camera:camera,sky:sky,fogColor:fogColor,fogDensity:fogDensity}=frame
+;const width=canvas.width;const height=canvas.height;gl.viewport(0,0,width,height);gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);gl.useProgram(skyProgram)
+;const tanHalf=Math.tan(camera.fov*Math.PI/360);gl.uniform2f(skyU.uResolution,width,height);gl.uniform3f(skyU.uFwd,camera.fwd.x,camera.fwd.y,camera.fwd.z)
+;gl.uniform3f(skyU.uRight,camera.right.x,camera.right.y,camera.right.z);gl.uniform3f(skyU.uUp,camera.up.x,camera.up.y,camera.up.z)
+;gl.uniform3f(skyU.uCamPos,camera.eye.x,camera.eye.y,camera.eye.z);gl.uniform3f(skyU.uSunDir,sky.sunDir.x,sky.sunDir.y,sky.sunDir.z)
+;gl.uniform3f(skyU.uFog,fogColor[0],fogColor[1],fogColor[2]);gl.uniform1f(skyU.uTanHalf,tanHalf);gl.uniform1f(skyU.uAspect,width/height)
+;gl.uniform1f(skyU.uStorm,sky.storm);gl.uniform1f(skyU.uDawn,sky.dawn);gl.uniform1f(skyU.uNight,sky.night);gl.uniform1f(skyU.uTime,sky.time)
+;gl.bindVertexArray(skyVao);gl.drawArrays(gl.TRIANGLES,0,3);gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.depthMask(true);gl.enable(gl.CULL_FACE)
+;gl.cullFace(gl.BACK);gl.useProgram(worldProgram);gl.uniformMatrix4fv(worldU.uViewProj,false,camera.viewProj)
+;gl.uniform3f(worldU.uSunDir,sky.sunDir.x,sky.sunDir.y,sky.sunDir.z);gl.uniform3f(worldU.uFogColor,fogColor[0],fogColor[1],fogColor[2])
+;gl.uniform3f(worldU.uCamPos,camera.eye.x,camera.eye.y,camera.eye.z);gl.uniform1f(worldU.uFogDensity,fogDensity);gl.uniform1f(worldU.uStorm,sky.storm)
+;gl.uniform1f(worldU.uAlpha,1);const identity=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);drawWorldMesh(frame.terrain,identity,1,sky.night)
+;drawWorldMesh(frame.water,identity,1,sky.night);drawWorldMesh(frame.runway,identity,1,sky.night);drawWorldMesh(frame.worldMesh,identity,1,sky.night)
+;if(frame.aircraft){for(const part of frame.aircraft.parts){if((part.alpha??1)>=.999)drawWorldMesh(part.mesh,part.model,1,sky.night)}
+const transparent=frame.aircraft.parts.filter(part=>(part.alpha??1)<.999);if(transparent.length>0){gl.enable(gl.BLEND)
+;gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);for(const part of transparent)drawWorldMesh(part.mesh,part.model,part.alpha,sky.night)
+;gl.depthMask(true);gl.disable(gl.BLEND)}}if(frame.particles&&frame.particles.length>0){gl.uniformMatrix4fv(worldU.uModel,false,identity)
+;gl.uniform1f(worldU.uAlpha,.55);gl.uniform1f(worldU.uNight,sky.night);drawParticles(frame.particles)}gl.enable(gl.BLEND)
+;gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);gl.useProgram(cloudProgram)
+;gl.uniformMatrix4fv(cloudU.uViewProj,false,camera.viewProj);gl.uniform3f(cloudU.uCamRight,camera.right.x,camera.right.y,camera.right.z)
+;gl.uniform3f(cloudU.uCamUp,camera.up.x,camera.up.y,camera.up.z);gl.uniform3f(cloudU.uCamPos,camera.eye.x,camera.eye.y,camera.eye.z)
+;gl.uniform1f(cloudU.uStorm,sky.storm);gl.uniform3f(cloudU.uFog,fogColor[0],fogColor[1],fogColor[2]);gl.uniform1f(cloudU.uDawn,sky.dawn)
+;gl.uniform1f(cloudU.uNight,sky.night);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(cloudU.uTex,0);gl.bindVertexArray(cloudVao)
+;gl.drawArrays(gl.TRIANGLES,0,frame.clouds*6);gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE)}resize(1280,800);return{gl:gl,
+uploadMesh:uploadMesh,uploadClouds:uploadClouds,resize:resize,drawFrame:drawFrame}}export function cameraView(eye,fwd,up,fov,aspect){
+const right=vnorm(vcross(fwd,up));const trueUp=vcross(right,fwd);const view=mat4LookAt(eye,{x:eye.x+fwd.x,y:eye.y+fwd.y,z:eye.z+fwd.z},trueUp)
+;const proj=mat4Perspective(fov*Math.PI/180,aspect,.35,14e3);const viewProj=mat4Multiply(proj,view);return{eye:eye,fwd:fwd,right:right,up:trueUp,fov:fov,
+aspect:aspect,near:.35,far:14e3,view:view,proj:proj,viewProj:viewProj}}
+export function drawFrame(renderer, frame) { renderer.drawFrame(frame); }
+export function resize(renderer, width, height) { renderer.resize(width, height); }
