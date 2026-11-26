@@ -21,11 +21,11 @@ const size=clamp(radiusPx*.9,12,26);ctx.beginPath();ctx.moveTo(-size,-size*.5);c
 ctx.beginPath();ctx.arc(0,0,radiusPx,0,Math.PI*2);ctx.stroke();ctx.setLineDash([5,6]);ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(0,0,radiusPx*.62,0,Math.PI*2)
 ;ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(-radiusPx-7,0);ctx.lineTo(-radiusPx+3,0);ctx.moveTo(radiusPx-3,0);ctx.lineTo(radiusPx+7,0)
 ;ctx.stroke()}ctx.shadowBlur=3;const label=`${target.label} · ${(distance/1e3).toFixed(1)} KM`;mono(ctx,label,0,-radiusPx-10,12,CREAM,"center","700","1px")
-;ctx.restore()}export function drawWarnings(ctx,rdo,target,distanceToStrip){const warnings=[];if(rdo.stalled)warnings.push("STALL")
+;ctx.restore()}export function drawWarnings(ctx,rdo,target,distanceToStrip,time){const warnings=[];if(rdo.stalled)warnings.push("STALL")
 ;if(rdo.aglFt<120&&rdo.vsiFpm<-1400)warnings.push("PULL UP");if(rdo.fuelMin<10)warnings.push("FUEL 10 MIN")
 ;if(target&&target.kind==="land"&&!rdo.gearDown&&rdo.aglFt<500&&distanceToStrip<3e3)warnings.push("GEAR");if(rdo.damage.engine<30)warnings.push("OIL")
 ;if(warnings.length===0)return;ctx.save();glow(ctx,true);const text=warnings.slice(0,3).join("   ");ctx.font=`700 20px ${HUD_FONT}`;ctx.textAlign="center"
-;const width=ctx.measureText(text).width+26;const pulse=.72+Math.sin(performance.now()*.008)*.18;ctx.globalAlpha=pulse;ctx.strokeStyle=WARN;ctx.lineWidth=1.6
+;const width=ctx.measureText(text).width+26;const pulse=.72+Math.sin((time??0)*8)*.18;ctx.globalAlpha=pulse;ctx.strokeStyle=WARN;ctx.lineWidth=1.6
 ;ctx.strokeRect(640-width/2,96,width,32);ctx.fillStyle=WARN;ctx.fillText(text,640,119);ctx.restore()}function drawReticle(ctx,camera,flight){ctx.save()
 ;glow(ctx,true);ctx.strokeStyle="rgba(246,235,210,0.72)";ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(640,400,9,0,Math.PI*2);ctx.moveTo(640-22,400)
 ;ctx.lineTo(640-13,400);ctx.moveTo(640+13,400);ctx.lineTo(640+22,400);ctx.moveTo(640,400-22);ctx.lineTo(640,400-13);ctx.stroke()
@@ -39,8 +39,8 @@ if(!target||target.kind!=="land"||!target.strip)return;const strip=target.strip;
 ;ctx.strokeStyle=AMBER;ctx.fillStyle=AMBER;const latY=226+74+lateral*46;ctx.fillRect(826,latY-1.5,8,3);const glY=226+74+glide*46;ctx.fillRect(1002,glY-1.5,8,3)
 ;mono(ctx,"LOC",830,218,9,"rgba(246,235,210,0.65)","center");mono(ctx,"GS",1006,218,9,"rgba(246,235,210,0.65)","center");ctx.restore()}
 function drawDust(ctx,camera,particles){if(!particles||particles.length===0)return;ctx.save();for(const particle of particles){if(particle.life<=0)continue
-;const point=projectPoint(camera,particle.p);if(!point.visible)continue;const radius=clamp(particle.size*666/Math.max(2,point.distance),3,110)
-;const alpha=clamp(particle.life,0,1)*.2;const puff=ctx.createRadialGradient(point.x,point.y,0,point.x,point.y,radius)
+;const point=projectPoint(camera,particle.p);if(!point.visible)continue;const radius=clamp(particle.size*240/Math.max(2,point.distance),2,46)
+;const alpha=clamp(particle.life,0,1)*.16;const puff=ctx.createRadialGradient(point.x,point.y,0,point.x,point.y,radius)
 ;puff.addColorStop(0,`rgba(214,198,164,${alpha})`);puff.addColorStop(.55,`rgba(196,180,146,${alpha*.55})`);puff.addColorStop(1,"rgba(196,180,146,0)")
 ;ctx.fillStyle=puff;ctx.beginPath();ctx.arc(point.x,point.y,radius,0,Math.PI*2);ctx.fill()}ctx.restore()}function drawRain(ctx,sky,time){if(sky.rain<=.02)return
 ;ctx.save();ctx.strokeStyle=`rgba(200,218,222,${.12+sky.rain*.18})`;ctx.lineWidth=1;ctx.beginPath();for(let i=0;i<130;i+=1){
@@ -71,7 +71,7 @@ mono(ctx,`${sortie.mission.code} · ${sortie.mission.name.toUpperCase()}`,42,120
 ;drawHeadingTape(ctx,rdo,640,58,420);const wind=sky.weather
 ;mono(ctx,`WIND ${String(wind.from).padStart(3,"0")}/${Math.round(wind.wind)}`,920,42,10,"rgba(246,235,210,0.7)","left","600","0.5px")
 ;drawWindArrow(ctx,1005,40,wind.from,wind.wind);drawReticle(ctx,camera,flight);drawTargetRing(ctx,camera,target,flight);drawApproachBars(ctx,flight,target,rdo)
-;drawWarnings(ctx,rdo,target,target&&target.strip?Math.hypot(flight.p.x-target.strip.x,flight.p.z-target.strip.z):9999)
+;drawWarnings(ctx,rdo,target,target&&target.strip?Math.hypot(flight.p.x-target.strip.x,flight.p.z-target.strip.z):9999,sky.time)
 ;if(sortie&&sortie.messageTimer>0&&sortie.message){ctx.save();ctx.textAlign="center";ctx.font=`700 24px ${SERIF}`
 ;const width=ctx.measureText(sortie.message).width+56;ctx.fillStyle="rgba(34,32,27,0.72)";ctx.fillRect(640-width/2,558,width,42);ctx.strokeStyle=AMBER
 ;ctx.lineWidth=1;ctx.strokeRect(640-width/2+4,562,width-8,34);ctx.fillStyle=CREAM;ctx.fillText(sortie.message,640,587);ctx.restore()}if(opts.ribbon){ctx.save()
@@ -81,15 +81,35 @@ mono(ctx,`${sortie.mission.code} · ${sortie.mission.name.toUpperCase()}`,42,120
 ;ctx.lineTo(-4,2);ctx.moveTo(0,8);ctx.lineTo(4,2);ctx.stroke();ctx.restore()}function card(ctx,x,y,width,height,rotate=0){ctx.save();ctx.translate(x,y)
 ;ctx.rotate(rotate);ctx.fillStyle="rgba(0,0,0,0.35)";ctx.fillRect(8,10,width,height);ctx.fillStyle=PAPER;ctx.fillRect(0,0,width,height)
 ;ctx.strokeStyle="#B9AC8C";ctx.lineWidth=1;ctx.strokeRect(.5,.5,width-1,height-1);ctx.strokeStyle="rgba(34,32,27,0.18)";ctx.strokeRect(10,10,width-20,height-20)
-;ctx.restore()}export function drawTitle(ctx,time){ctx.save();const grad=ctx.createLinearGradient(0,0,0,800);grad.addColorStop(0,"rgba(20,24,24,0.42)")
-;grad.addColorStop(.55,"rgba(20,24,24,0.08)");grad.addColorStop(1,"rgba(20,24,24,0.55)");ctx.fillStyle=grad;ctx.fillRect(0,0,1280,800);ctx.textAlign="center"
-;ctx.font=`700 84px ${SERIF}`;ctx.fillStyle=CREAM;ctx.shadowColor="rgba(0,0,0,0.75)";ctx.shadowBlur=10;ctx.fillText("MONSOON POST",640,260);ctx.shadowBlur=0
-;ctx.fillStyle=VERMILION;ctx.fillRect(390,282,500,5);ctx.font=`600 15px ${HUD_FONT}`;ctx.letterSpacing="5px";ctx.fillStyle="#E8DFC8"
-;ctx.fillText("THE LAST AIRMAIL INTO THE KHARUN HIGHLANDS",640,314);ctx.letterSpacing="0px";ctx.font=`italic 19px ${SERIF}`;ctx.fillStyle="#F2C9A0"
-;ctx.fillText("One aircraft. Six sorties. The pass closes in four months.",640,354);const pulse=.65+Math.sin(time*2.4)*.25;ctx.globalAlpha=pulse
-;ctx.font=`700 18px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.fillText("PRESS ENTER TO FLY SORTIE 01",640,514);ctx.font=`600 13px ${HUD_FONT}`
-;ctx.fillStyle="rgba(246,235,210,0.8)";ctx.fillText("B  ROUTE BOARD      H  HELP      K  MUTE",640,544);ctx.globalAlpha=1;ctx.font=`600 11px ${HUD_FONT}`
-;ctx.fillStyle="rgba(246,235,210,0.55)";ctx.fillText("KP-04 · KHARUN POST · 1962",640,748);ctx.restore()}
+;ctx.restore()}export function drawTitle(ctx,time,missions=[],progress={},scores={},selected=0){ctx.save();const grad=ctx.createLinearGradient(0,0,0,800);grad.addColorStop(0,"rgba(20,24,24,0.42)")
+grad.addColorStop(.55,"rgba(20,24,24,0.08)");grad.addColorStop(1,"rgba(20,24,24,0.55)");ctx.fillStyle=grad;ctx.fillRect(0,0,1280,800);ctx.textAlign="center"
+ctx.font=`700 84px ${SERIF}`;ctx.fillStyle=CREAM;ctx.shadowColor="rgba(0,0,0,0.75)";ctx.shadowBlur=10;ctx.fillText("MONSOON POST",640,260);ctx.shadowBlur=0
+ctx.fillStyle=VERMILION;ctx.fillRect(390,282,500,5);ctx.font=`600 15px ${HUD_FONT}`;ctx.letterSpacing="5px";ctx.fillStyle="#E8DFC8"
+ctx.fillText("THE LAST AIRMAIL INTO THE KHARUN HIGHLANDS",640,314);ctx.letterSpacing="0px";ctx.font=`italic 19px ${SERIF}`;ctx.fillStyle="#F2C9A0"
+ctx.fillText("One aircraft. Six sorties. The pass closes in four months.",640,354)
+ctx.fillStyle="rgba(20,24,24,0.28)";ctx.fillRect(280,380,720,198);ctx.strokeStyle="rgba(246,235,210,0.16)";ctx.lineWidth=1;ctx.strokeRect(280.5,380.5,719,197)
+const total=missions.reduce((n,m)=>n+(scores[m.id]??0),0);const max=missions.reduce((n,m)=>n+m.gold,0);const earned=missions.filter(m=>progress[m.id]).length
+ctx.textAlign="left";ctx.font=`700 9px ${HUD_FONT}`;ctx.fillStyle="rgba(246,235,210,0.6)";ctx.letterSpacing="2px";ctx.fillText("CAMPAIGN",262,402)
+ctx.font=`700 13px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.fillText(`${Math.round(total)} / ${max} PTS`,262,424);ctx.font=`600 10px ${HUD_FONT}`
+ctx.fillStyle="rgba(246,235,210,0.8)";ctx.fillText(`${earned} / ${missions.length} POSTMARKS`,262,442);ctx.letterSpacing="0px"
+const x0=400,x1=1012,y=422;ctx.strokeStyle="rgba(246,235,210,0.38)";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);ctx.stroke()
+for(let i=0;i<missions.length;i+=1){const m=missions[i];const x=x0+i*(x1-x0)/Math.max(1,missions.length-1);const mark=progress[m.id];const chosen=i===selected
+ctx.beginPath();ctx.arc(x,y,chosen?15:12,0,Math.PI*2);ctx.fillStyle=mark?VERMILION:"rgba(34,32,27,0.62)";ctx.fill();ctx.strokeStyle=chosen?AMBER:"rgba(246,235,210,0.6)";ctx.lineWidth=chosen?2.5:1.2;ctx.stroke()
+ctx.textAlign="center";ctx.font=`700 10px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.fillText(String(i+1).padStart(2,"0"),x,y+3)
+ctx.font=`700 8px ${HUD_FONT}`;ctx.fillStyle="rgba(246,235,210,0.55)";ctx.fillText(m.code.replace("SORTIE ","S"),x,y+27)
+ctx.font=`700 9px ${HUD_FONT}`;ctx.fillStyle=mark?AMBER:"rgba(246,235,210,0.42)";ctx.fillText(mark??"OPEN",x,y+43)}
+ctx.textAlign="center";ctx.font=`600 12px ${HUD_FONT}`;ctx.fillStyle="rgba(246,235,210,0.85)";ctx.fillText(`CAMPAIGN TOTAL ${Math.round(total)} / ${max} PTS · ${earned} OF ${missions.length} POSTMARKS`,640,498)
+const next=missions.find(m=>!progress[m.id])??missions[Math.min(selected,missions.length-1)];ctx.font=`700 13px ${HUD_FONT}`;ctx.fillStyle=AMBER
+ctx.fillText(next?`NEXT · ${next.code} — ${next.name.toUpperCase()}`:"ALL SIX SORTIES FLOWN",640,524)
+const pulse=.65+Math.sin(time*2.4)*.25;ctx.globalAlpha=pulse;ctx.font=`700 18px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.fillText("PRESS ENTER TO FLY SORTIE 01",640,566);ctx.font=`600 13px ${HUD_FONT}`
+ctx.fillStyle="rgba(246,235,210,0.8)";ctx.fillText("B  ROUTE BOARD      H  HELP      K  MUTE",640,594);ctx.globalAlpha=1;ctx.font=`600 11px ${HUD_FONT}`
+ctx.fillStyle="rgba(246,235,210,0.55)";ctx.fillText("KP-04 · KHARUN POST · 1962",640,748);ctx.restore()}
+export function drawCrash(ctx,cause,time){ctx.save();const g=ctx.createRadialGradient(640,400,140,640,400,780);g.addColorStop(0,"rgba(20,6,4,0.12)");g.addColorStop(1,"rgba(20,6,4,0.62)")
+ctx.fillStyle=g;ctx.fillRect(0,0,1280,800);ctx.textAlign="center";ctx.font=`700 82px ${SERIF}`;ctx.fillStyle=WARN;ctx.shadowColor="rgba(0,0,0,0.9)";ctx.shadowBlur=18;ctx.fillText("CRASH",640,356)
+ctx.shadowBlur=0;ctx.font=`700 16px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.letterSpacing="5px";ctx.fillText("AIRCRAFT LOST",640,394);ctx.letterSpacing="0px"
+ctx.font=`600 15px ${HUD_FONT}`;ctx.fillStyle="#F2C9A0";ctx.fillText(cause??"the aircraft was lost",640,428)
+const pulse=.55+Math.sin(time*5)*.25;ctx.globalAlpha=pulse;ctx.font=`700 12px ${HUD_FONT}`;ctx.fillStyle=CREAM;ctx.fillText("IMPACT · HITSTOP",640,464);ctx.globalAlpha=1
+ctx.strokeStyle="rgba(216,72,47,0.8)";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(330,470);ctx.lineTo(950,470);ctx.stroke();ctx.restore()}
 export function drawBoard(ctx,missions,selected,progress,time){ctx.save();ctx.fillStyle="rgba(18,22,21,0.62)";ctx.fillRect(0,0,1280,800)
 ;card(ctx,190,84,900,632,-.005);ctx.textAlign="left";ctx.font=`700 36px ${SERIF}`;ctx.fillStyle=INK;ctx.fillText("Kharun Post · route board",232,150)
 ;ctx.font=`600 12px ${HUD_FONT}`;ctx.fillStyle="#6B604C";ctx.fillText("ONE AIRCRAFT · NO AUTOPILOT · NO RELOAD",232,174);ctx.strokeStyle=VERMILION

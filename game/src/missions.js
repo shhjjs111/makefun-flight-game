@@ -1,5 +1,5 @@
 // The route board's six sorties, their objectives and the scoring behind the postcard: land, drop
-import{STRIPS}from"./terrain.js";export const RINGS={tamsen:{x:430,y:660,z:-880,radius:40,label:"UPPER TAMSEN"},maru:{x:1860,y:442,z:160,radius:40,label:"MARU"
+import{STRIPS,stripSurfaceY}from"./terrain.js";export const RINGS={tamsen:{x:430,y:660,z:-880,radius:40,label:"UPPER TAMSEN"},maru:{x:1860,y:442,z:160,radius:40,label:"MARU"
 },nimra:{x:-1700,y:606,z:260,radius:40,label:"NIMRA"},bridge:{x:2020,y:430,z:520,radius:40,label:"BROKEN BRIDGE"}};export const GATES=[{x:-60,y:930,z:-2050,
 radius:90,label:"GATE 1 · RIVER BEND"},{x:260,y:1020,z:-2280,radius:90,label:"GATE 2 · DZONG SPUR"},{x:560,y:1110,z:-2500,radius:90,label:"GATE 3 · PASS HEAD"
 },{x:180,y:980,z:-2650,radius:90,label:"GATE 4 · NORTH WALL"}];export const MISSIONS=[{id:1,code:"SORTIE 01",name:"First Light Mail",weather:"CLEAR",dawn:.9,
@@ -35,7 +35,7 @@ ring:objective.ring?ringFor(objective.ring):null,gate:objective.gate!==undefined
 }));return{mission:mission,objectives:objectives,index:0,time:0,sacks:[],objectiveScores:[],finished:false,result:null,cargo:mission.cargo,target:null,
 message:"",messageTimer:0,legStart:0,touchdown:null,drops:0}}export function targetInfo(sortie){const objective=sortie.objectives[sortie.index]
 ;if(!objective)return null;if(objective.type==="drop"||objective.type==="gate"){const ring=objective.ring??objective.gate;return{kind:objective.type,x:ring.x,
-y:ring.y,z:ring.z,radius:ring.radius,label:ring.label}}const strip=objective.strip;return{kind:"land",x:strip.x+strip.length/2-40,y:strip.elev+2,z:strip.z,
+y:ring.y,z:ring.z,radius:ring.radius,label:ring.label}}const strip=objective.strip;return{kind:"land",x:strip.x+strip.length/2-40,y:stripSurfaceY(strip,strip.x+strip.length/2-40)+2,z:strip.z,
 radius:24,label:`${strip.name.toUpperCase()} 27`,strip:strip}}export function tryDrop(sortie,flight){const objective=sortie.objectives[sortie.index]
 ;if(!objective||objective.type!=="drop"||sortie.cargo<=0)return false;const target=objective.ring;sortie.cargo=Math.max(0,sortie.cargo-30);sortie.drops+=1
 ;sortie.sacks.push({p:{x:flight.p.x,y:flight.p.y-1.4,z:flight.p.z},v:{x:flight.v.x*.94,y:flight.v.y-1.2,z:flight.v.z*.94},age:0,target:target,evaluated:false,

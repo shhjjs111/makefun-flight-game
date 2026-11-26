@@ -123,7 +123,7 @@ this.engine.filter.frequency.setTargetAtTime(280 + rpm * 0.32, now, 0.2);
 this.wind.gain.gain.setTargetAtTime(clamp((speed - 8) / 60, 0, 1) * 0.12, now, 0.2);
 this.wind.filter.frequency.setTargetAtTime(480 + speed * 22, now, 0.2);
 this.rain.gain.gain.setTargetAtTime(sky.rain * 0.11, now, 0.4);
-const hornOn = flight.stalled === true;
+const hornOn = Boolean(flight.stalled);
 if (hornOn !== this.hornOn) {
 this.hornOn = hornOn;
 this.horn.gain.gain.setTargetAtTime(hornOn ? 0.05 : 0, now, 0.03);

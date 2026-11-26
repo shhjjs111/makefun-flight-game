@@ -1,27 +1,27 @@
 // Boot, the phase machine (title, board, brief, flight, paused, help, debrief) and the fixed-step
 import{applyDamage,createFlight,readouts,stepFlight}from"./flight-model.js";import{buildTerrain,heightAt,STRIPS}from"./terrain.js"
-;import{buildAircraft,damageVisuals,placeOnRunway,updateAircraft}from"./aircraft.js";import{createCamera,updateCamera,shake}from"./camera.js"
-;import{drawBoard,drawHelp,drawHud,drawPaused,drawPostcard,drawTitle}from"./hud.js"
+;import{buildAircraft,createSmoke,damageVisuals,placeOnRunway,stepSmoke,updateAircraft}from"./aircraft.js";import{createCamera,updateCamera,shake}from"./camera.js"
+;import{drawBoard,drawCrash,drawHelp,drawHud,drawPaused,drawPostcard,drawTitle}from"./hud.js"
 ;import{MISSIONS,createSortie,scoreSortie,targetInfo,tryDrop,updateObjectives}from"./missions.js"
 ;import{applyLandingDamage,crashCause,gradeLanding,groundContact,landingRibbon,rollOut}from"./landing.js";import{createRenderer}from"./render.js"
 ;import{createInstruments,drawPanel}from"./instruments.js"
 ;import{ACTION_BACK,ACTION_CAMERA,ACTION_CONFIRM,ACTION_DROP,ACTION_FLAP,ACTION_GEAR,ACTION_HELP,ACTION_INVERT,ACTION_LIGHT,ACTION_MIXTURE,ACTION_MUTE,ACTION_PAUSE,ACTION_RETRY,ACTION_SENS_DOWN,ACTION_SENS_UP,createInput,readRudder,readStick,readThrottle,takeActions}from"./input.js"
-;import{CockpitAudio,engineLoop}from"./audio.js";import{buildSky,setSkyLight,setWeather,updateSky}from"./sky.js";import{buildWorld}from"./world.js"
+;import{CockpitAudio,engineLoop}from"./audio.js";import{buildSky,setSkyLight,setWeather,updateSky}from"./sky.js";import{ambientGeometry,buildWorld}from"./world.js"
 ;import{cameraForShot,createAttractFlight,flightEnv,flyAttract,shotReadouts,stageShot,updateParticles}from"./attract.js"
-;import{clamp,createMeshBuilder,hex,mat4Model,quatFromYawPitchRoll}from"./util.js";const STEP=1/120;window.addEventListener("error",event=>{
+;import{clamp,createMeshBuilder,hex,lerp,mat4Model,quatFromYawPitchRoll,quatNlerp,vlerp}from"./util.js";const STEP=1/120;window.addEventListener("error",event=>{
 window.__bootError=String(event.error&&event.error.stack?event.error.stack:event.message)});const params=new URLSearchParams(window.location.search)
 ;const shotName=params.get("shot");const seedParam=Number.parseInt(params.get("seed")??"7",10);const seed=Number.isInteger(seedParam)?seedParam:7
 ;const worldCanvas=document.getElementById("world");const hudCanvas=document.getElementById("hud");const ctx=hudCanvas.getContext("2d")
 ;const renderer=createRenderer(worldCanvas);const terrain=buildTerrain();const worldData=buildWorld();const aircraftModel=buildAircraft()
 ;aircraftModel.bodyMesh=renderer.uploadMesh(aircraftModel.body);aircraftModel.propMesh=renderer.uploadMesh(aircraftModel.propBlades)
-;aircraftModel.propDiscMesh=renderer.uploadMesh(aircraftModel.propDisc);const terrainMesh=renderer.uploadMesh(terrain.mesh)
+;aircraftModel.propDiscMesh=renderer.uploadMesh(aircraftModel.propDisc);for(const key of["scar","tatter","propBent","debris"])aircraftModel[key]=renderer.uploadMesh(aircraftModel[key]);const terrainMesh=renderer.uploadMesh(terrain.mesh)
 ;const waterMesh=renderer.uploadMesh(terrain.water);const runwayMesh=renderer.uploadMesh(terrain.runway);const worldMesh=renderer.uploadMesh(worldData.mesh)
 ;const cargoBuilder=createMeshBuilder();cargoBuilder.box({x:0,y:0,z:0},{x:1.5,y:1.3,z:1.5},hex("#C9B98A"));cargoBuilder.box({x:0,y:0,z:0},{x:1.56,y:.22,z:1.56
 },hex("#A6533A"));cargoBuilder.box({x:0,y:0,z:0},{x:.2,y:1.36,z:1.56},hex("#6B5A3E"));const cargoMesh=renderer.uploadMesh(cargoBuilder.build())
 ;const audio=new CockpitAudio;const input=createInput(worldCanvas);const game={phase:"title",missionIndex:0,selected:0,menu:0,flight:null,sortie:null,
 sky:buildSky(seed),camera:createCamera(),instruments:createInstruments(),particles:[],ribbon:"",ribbonTimer:0,stopTimer:0,stopStrip:null,progress:{},
-lightOn:true,muted:false,cameraMode:"chase",invertY:false,sensitivity:1,helpFrom:"title",time:0,cameraSnap:true,result:null,attract:null};game.sky.dawn=.85
-;game.attract=createAttractFlight();game.flight=game.attract;function fogColorFor(sky){if(sky.night>.5)return hex("#1B272C")
+lightOn:true,muted:false,cameraMode:"chase",invertY:false,sensitivity:1,helpFrom:"title",time:0,cameraSnap:true,result:null,attract:null,prevFlight:null,renderAlpha:1,crashTimer:0,crashCause:"",smoke:createSmoke(),scores:{}};game.sky.dawn=.85
+;game.attract=createAttractFlight();game.flight=game.attract;game.smoke=createSmoke();game.particles=[];game.crashTimer=0;game.prevFlight=null;function fogColorFor(sky){if(sky.night>.5)return hex("#1B272C")
 ;if(sky.storm>.6)return hex("#6C7670");if(sky.dawn>.4)return hex("#9AA5A0");return hex("#AAB3AA")}function addCargo(parts,sortie){if(!sortie)return parts
 ;for(const sack of sortie.sacks??[]){if(sack.age>3&&sack.evaluated)continue;const tumble=quatFromYawPitchRoll(sack.age*2.6,sack.age*1.7,sack.age*2.1)
 ;parts.push({name:"mail",mesh:cargoMesh,model:mat4Model(sack.p,tumble),alpha:1})}return parts}function spawnDust(contact){if(!contact)return
@@ -31,14 +31,14 @@ x:(i-15)*.24,y:1.2+i%7*.3,z:side*(.9+i%4*.45)},life:.75+i%5*.12,size:.55+i%4*.28
 ;setSkyLight(game.sky,{dawn:mission.dawn,night:mission.night});game.flight=createFlight({strip:strip,fuel:mission.fuelPct*210,cargo:mission.cargo})
 ;placeOnRunway(game.flight,strip,0);game.flight.fuel=mission.fuelPct*210;game.flight.cargo=mission.cargo;game.sortie=createSortie(mission)
 ;game.sortie.target=targetInfo(game.sortie);game.camera=createCamera();game.camera.back=27;game.camera.camHeight=5;game.camera.pitchOffset=3.2
-;game.instruments=createInstruments();game.particles=[];game.ribbon="";game.ribbonTimer=0;game.stopTimer=0;game.stopStrip=null;game.result=null
+;game.instruments=createInstruments();game.particles=[];game.ribbon="";game.ribbonTimer=0;game.stopTimer=0;game.stopStrip=null;game.result=null;game.prevFlight=null;game.crashTimer=0;game.crashCause="";game.smoke=createSmoke()
 ;game.phase=toBrief?"brief":"flight";game.cameraSnap=true}function finishSortie(cause=null){const result=scoreSortie(game.sortie,game.flight);const lines=[]
 ;for(const item of game.sortie.objectiveScores){lines.push(`${item.label}  +${Math.round(item.points)}  ${item.note?`(${item.note})`:""}`)}
 lines.push(`TIME +${result.timeBonus.toFixed(0)}   FUEL +${result.fuelBonus.toFixed(0)}   DAMAGE -${result.damagePenalty.toFixed(0)}`);if(cause){lines.push("")
 ;lines.push(`CAUSE: ${cause}`);result.grade="NONE";result.postmark="MISSING"}result.lines=lines;result.cause=cause;game.result=result
-;game.progress[MISSIONS[game.missionIndex].id]=result.postmark;game.phase="debrief";audio.result(result.grade)}function respawnAt(strip){
+;game.progress[MISSIONS[game.missionIndex].id]=result.postmark;game.scores[MISSIONS[game.missionIndex].id]=Math.max(game.scores[MISSIONS[game.missionIndex].id]??0,result.total);game.phase="debrief";audio.result(result.grade)}function respawnAt(strip){
 placeOnRunway(game.flight,strip,0);game.flight.fuel=Math.max(game.flight.fuel,120);game.flight.cargo=game.sortie.cargo;game.camera=createCamera()
-;game.camera.back=27;game.camera.camHeight=5;game.camera.pitchOffset=3.2;game.cameraSnap=true;game.ribbon="MAIL DELIVERED · RETURN LEG";game.ribbonTimer=3}
+;game.camera.back=27;game.camera.camHeight=5;game.camera.pitchOffset=3.2;game.cameraSnap=true;game.prevFlight=null;game.crashTimer=0;game.ribbon="MAIL DELIVERED · RETURN LEG";game.ribbonTimer=3}
 function handleActions(actions){if(actions&ACTION_MUTE){game.muted=!game.muted;audio.setMuted(game.muted)}if(game.phase==="title"){
 if(actions&ACTION_CONFIRM)startSortie(game.selected,true);else if(actions&ACTION_BACK){game.phase="board";audio.radio()}else if(actions&ACTION_HELP){
 game.helpFrom="title";game.phase="help"}}else if(game.phase==="board"){if(actions&ACTION_CONFIRM){startSortie(game.selected,true);audio.radio()
@@ -49,56 +49,62 @@ game.helpFrom="flight";game.phase="help"}else if(actions&ACTION_CAMERA){game.cam
 if(game.flight.onGround||game.flight.airspeed<60){game.flight.gear=!game.flight.gear;if(game.flight.gear)audio.gearMotor();else audio.gearClunk()}
 }else if(actions&ACTION_DROP){if(tryDrop(game.sortie,game.flight)){game.flight.cargoDoorOpen=true;audio.drop()}}else if(actions&ACTION_MIXTURE){game.flight.lean=!game.flight.lean}else if(actions&ACTION_LIGHT){game.lightOn=!game.lightOn}}else if(game.phase==="paused"){
 if(actions&ACTION_PAUSE||actions&ACTION_CONFIRM)game.phase="flight";else if(actions&ACTION_RETRY)startSortie(game.missionIndex,false);else if(actions&ACTION_BACK){
-game.phase="board";game.flight=game.attract;game.sortie=null;game.sky=buildSky(seed)
+game.phase="board";game.flight=game.attract;game.smoke=createSmoke();game.particles=[];game.crashTimer=0;game.prevFlight=null;game.sortie=null;game.sky=buildSky(seed)
 }else if(actions&ACTION_INVERT)game.invertY=!game.invertY;else if(actions&ACTION_SENS_DOWN)game.sensitivity=clamp(game.sensitivity-.1,.4,1.6);else if(actions&ACTION_SENS_UP)game.sensitivity=clamp(game.sensitivity+.1,.4,1.6)
 }else if(game.phase==="help"){if(actions&(ACTION_CONFIRM|ACTION_BACK|ACTION_HELP))game.phase=game.helpFrom}else if(game.phase==="debrief"){
 if(actions&ACTION_RETRY)startSortie(game.missionIndex,false);else if(actions&(ACTION_BACK|ACTION_CONFIRM)){game.phase="board";game.flight=game.attract
-;game.sortie=null;game.sky=buildSky(seed)}}}function stepSimulation(dt){if(!game.sortie||game.phase!=="flight")return;if(game.stopTimer>0){game.stopTimer-=dt
-;if(game.stopTimer<=0&&game.stopStrip){const strip=game.stopStrip;game.stopStrip=null;respawnAt(strip)}return}const flight=game.flight;if(flight.crashed){
-finishSortie(flight.impactCause??"the aircraft was lost");return}const stick=readStick(input);const rudder=readRudder(input)
+;game.sortie=null;game.sky=buildSky(seed)}}}function startCrash(flight,cause){if(game.crashTimer>0)return;game.crashTimer=1.05;game.crashCause=cause??"the aircraft was lost";game.ribbon="AIRCRAFT LOST";game.ribbonTimer=4;spawnDust({point:flight.p});for(let i=0;i<16;i+=1)game.particles.push({p:{x:flight.p.x+(i%5-2)*.6,y:flight.p.y-.4+(i%3)*.4,z:flight.p.z+(i%4-1.5)*.5},v:{x:(i%7-3)*.5,y:1.6+i%5*.5,z:(i%5-2)*.5},life:1.4+i%4*.2,size:.9+i%3*.3,fire:true});shake(game.camera,4)}
+function stepSimulation(dt){if(!game.sortie||game.phase!=="flight")return;if(game.crashTimer>0){game.crashTimer-=dt;if(game.crashTimer<=0)finishSortie(game.crashCause);return}if(game.stopTimer>0){game.stopTimer-=dt
+;if(game.stopTimer<=0&&game.stopStrip){const strip=game.stopStrip;game.stopStrip=null;respawnAt(strip)}return}const flight=game.flight;if(flight.crashed){startCrash(flight,flight.impactCause??"the aircraft was lost");return}game.prevFlight={p:{...flight.p},q:flight.q.slice(),heading:flight.heading,bank:flight.bank,pitch:flight.pitch};const stick=readStick(input);const rudder=readRudder(input)
 ;const throttle=readThrottle(input,flight.throttle,dt);const controls={pitch:clamp(-stick.y*game.sensitivity*(game.invertY?-1:1),-1,1),
 roll:clamp(-stick.x*game.sensitivity,-1,1),yaw:rudder*.7,throttle:throttle,flaps:flight.flaps,gear:flight.gear,brakes:input.brake?1:0,lean:flight.lean}
 ;stepFlight(flight,controls,flightEnv(game.sky),dt);applyHazards(flight,game.sky,dt);let contact=null;if(!flight.onGround){
 contact=groundContact(flight,flightEnv(game.sky));if(contact){contact.grade=gradeLanding(contact);rollOut(flight,contact);applyLandingDamage(flight,contact)
 ;audio.touchdownThump(contact.sink);audio.tyreChirp();shake(game.camera,1.2);spawnDust(contact);game.ribbon=landingRibbon(contact);game.ribbonTimer=3.5}}
-const finished=updateObjectives(game.sortie,flight,contact?0:dt,contact,heightAt);if(game.sortie.time>game.sortie.mission.par*1.6&&!game.sortie.finished){finishSortie("the pass closed before KP-04 got home");return;}if(flight.crashed){
-finishSortie(flight.impactCause??crashCause(flight,contact));return}if(finished||game.sortie.finished){finishSortie(null);return}
+const finished=updateObjectives(game.sortie,flight,contact?0:dt,contact,heightAt);if(game.sortie.time>game.sortie.mission.par*1.6&&!game.sortie.finished){finishSortie("the pass closed before KP-04 got home");return;}if(flight.crashed){startCrash(flight,flight.impactCause??crashCause(flight,contact));return}if(finished||game.sortie.finished){finishSortie(null);return}
 game.sortie.target=targetInfo(game.sortie);if(contact&&game.sortie.stopStrip&&game.sortie.index<game.sortie.objectives.length){
 game.stopStrip=game.sortie.stopStrip;game.sortie.stopStrip=null;game.stopTimer=2.4}if(game.ribbonTimer>0)game.ribbonTimer-=dt
 ;if(flight.fuel<=0&&flight.onGround&&flight.groundSpeed<1){finishSortie("out of fuel on the ground")}}function applyHazards(flight,sky,_dt){
 if(sky.storm>.55&&flight.p.y<2700&&!flight.onGround){const phase=Math.sin(flight.time*1.37+flight.p.x*.002);if(phase>.996){
 applyDamage(flight,"leftWing",1+flight.time%3);applyDamage(flight,"rightWing",1);audio.noiseBurst(.08,3e3,.03)}}if(flight.flaps>0&&flight.airspeed>68){
 if(!flight.flapDamageTimer||flight.time>flight.flapDamageTimer){applyDamage(flight,"leftWing",10);flight.flapDamageTimer=flight.time+2}}}
-function renderScene(dt,frozen=false){const sky=game.sky;const flight=game.flight;const mode=game.cameraMode;const camera=game.camera
+function renderScene(dt,frozen=false){const sky=game.sky;let flight=game.flight;const mode=game.cameraMode;const camera=game.camera
+if(!frozen&&game.phase==="flight"&&game.prevFlight)flight={...flight,p:vlerp(game.prevFlight.p,flight.p,game.renderAlpha),q:quatNlerp(game.prevFlight.q,flight.q,game.renderAlpha),heading:lerp(game.prevFlight.heading,flight.heading,game.renderAlpha),bank:lerp(game.prevFlight.bank,flight.bank,game.renderAlpha),pitch:lerp(game.prevFlight.pitch,flight.pitch,game.renderAlpha)}
 ;if(!frozen)updateSky(sky,dt,camera.eye);if(game.cameraSnap)camera.snapped=true;const env=flightEnv(sky);updateCamera(camera,flight,mode,dt,env)
 ;if(game.cameraSnap){camera.snapped=false;game.cameraSnap=false}damageVisuals(aircraftModel,flight)
-;const parts=addCargo(updateAircraft(aircraftModel,flight,dt,mode==="cockpit"),game.sortie);renderer.uploadClouds(sky.clouds);renderer.drawFrame({camera:camera,
+;const parts=addCargo(updateAircraft(aircraftModel,flight,dt,mode==="cockpit"),game.sortie);const ambient=ambientGeometry(worldData,sky,game.time)
+;const puffs=[];for(const p of game.smoke.list)puffs.push({p:p.p,size:p.size*1.75,color:p.fire?[1,.42,.12]:[.52,.52,.5],alpha:.42*Math.min(1,p.life)})
+;for(const p of game.particles)puffs.push({p:p.p,size:p.size*.85,color:p.fire?[1,.42,.12]:[.72,.64,.5],alpha:(p.fire?.55:.22)*clamp(p.life,0,1)});renderer.uploadClouds(sky.clouds);renderer.drawFrame({camera:camera,
 sky:sky,fogColor:fogColorFor(sky),fogDensity:11e-5+sky.storm*15e-5+sky.night*3e-5,terrain:terrainMesh,water:waterMesh,runway:runwayMesh,worldMesh:worldMesh,
-aircraft:{parts:parts},clouds:sky.clouds.length,particles:null});ctx.clearRect(0,0,1280,800);const rdo=readouts(flight,heightAt(flight.p.x,flight.p.z))
+aircraft:{parts:parts},clouds:sky.clouds.length,particles:[{vertices:ambient,alpha:1}],puffs:puffs});ctx.clearRect(0,0,1280,800);const rdo=readouts(flight,heightAt(flight.p.x,flight.p.z))
 ;const ribbon=game.ribbonTimer>0?game.ribbon:"";if(game.phase==="flight"||game.phase==="paused"||game.phase==="help"){
 drawHud(ctx,flight,rdo,game.sortie,sky,camera,{cockpit:mode==="cockpit",ribbon:ribbon,dust:game.particles})}drawPanel(ctx,flight,rdo,game.instruments,dt,{
-light:game.lightOn||sky.dawn>.5||sky.storm>.55||sky.night>.4})
-;if(game.phase==="title")drawTitle(ctx,game.time);else if(game.phase==="board")drawBoard(ctx,MISSIONS,game.selected,game.progress,game.time);else if(game.phase==="brief")drawPostcard(ctx,MISSIONS[game.missionIndex],{
+light:game.lightOn||sky.dawn>.5||sky.storm>.55||sky.night>.4});const crashMix=game.crashTimer>0?clamp((1.05-game.crashTimer)*3,0,1):0
+const filter=crashMix>0?`grayscale(${crashMix}) contrast(${1+crashMix*.12}) brightness(${1-crashMix*.14})`:"";if(worldCanvas.style.filter!==filter)worldCanvas.style.filter=filter
+if(game.crashTimer>0)drawCrash(ctx,game.crashCause,game.time)
+;if(game.phase==="title")drawTitle(ctx,game.time,MISSIONS,game.progress,game.scores,game.selected);else if(game.phase==="board")drawBoard(ctx,MISSIONS,game.selected,game.progress,game.time);else if(game.phase==="brief")drawPostcard(ctx,MISSIONS[game.missionIndex],{
 time:game.time});else if(game.phase==="debrief")drawPostcard(ctx,MISSIONS[game.missionIndex],{result:game.result,time:game.time
 });else if(game.phase==="paused")drawPaused(ctx,game.menu);else if(game.phase==="help")drawHelp(ctx)}function update(dt){game.time+=dt
 ;const actions=takeActions(input);handleActions(actions);if(game.phase==="board"){const y=input.keyY;if(y!==game.menuY){if(y<0)game.selected=(game.selected+5)%6;else if(y>0)game.selected=(game.selected+1)%6;game.menuY=y}}else{game.menuY=input.keyY}if(game.phase==="title"){flyAttract(game.attract,game.sky,dt,game.time);game.flight=game.attract
 }else if(game.phase==="flight"){let accumulator=game.accumulator??0;accumulator+=dt;let steps=0;while(accumulator>=STEP&&steps<4&&game.phase==="flight"){
-stepSimulation(STEP);accumulator-=STEP;steps+=1}if(steps===4)accumulator=Math.min(accumulator,STEP);game.accumulator=accumulator
+stepSimulation(STEP);accumulator-=STEP;steps+=1}if(steps===4)accumulator=Math.min(accumulator,STEP);game.accumulator=accumulator;game.renderAlpha=game.crashTimer>0?1:clamp(accumulator/STEP,0,1);stepSmoke(game.smoke,game.flight,dt,game.time)
 ;engineLoop(audio,game.flight,game.sky,dt)}if(game.phase==="title"||game.phase==="board"||game.phase==="brief"){updateSky(game.sky,dt,game.camera.eye)}
 game.particles=updateParticles(game.particles,dt)}let last=performance.now();export function frame(now){requestAnimationFrame(frame)
 ;const dt=Math.min((now-last)/1e3,.1);last=now;if(game.phase!=="paused"&&game.phase!=="help"&&game.phase!=="debrief")update(dt);else{game.time+=dt
 ;game.particles=updateParticles(game.particles,dt)}renderScene(dt,game.phase==="paused"||game.phase==="help"||game.phase==="debrief")}function runShot(){
-const shot=stageShot(shotName,seed);const camera=cameraForShot(shot);let particles=shot.particles??[];let elapsed=0;let captured=false
-;let lastShot=performance.now();window.__shotInfo={name:shotName,ready:false};function shotFrame(now){requestAnimationFrame(shotFrame);try{
-const dt=Math.min((now-lastShot)/1e3,.05);lastShot=now;elapsed+=dt;updateSky(shot.sky,dt,camera.eye)
-;if(shotName==="storm")shot.sky.flash=.55+Math.sin(elapsed*1.7)*.28;particles=updateParticles(particles,dt)
-;const parts=addCargo(updateAircraft(aircraftModel,shot.flight,dt,shot.mode==="cockpit"),shot.sortie);renderer.uploadClouds(shot.sky.clouds)
+const shot=stageShot(shotName,seed);const camera=cameraForShot(shot);let particles=shot.particles??[];const smoke=createSmoke();let elapsed=0;let captured=false;damageVisuals(aircraftModel,shot.flight)
+;window.__shotInfo={name:shotName,ready:false};function shotFrame(){requestAnimationFrame(shotFrame);try{
+const dt=1/60;elapsed+=dt;updateSky(shot.sky,dt,camera.eye)
+;if(shotName==="storm")shot.sky.flash=.55+Math.sin(elapsed*1.7)*.28;particles=updateParticles(particles,dt);stepSmoke(smoke,shot.flight,dt,elapsed)
+;const parts=addCargo(updateAircraft(aircraftModel,shot.flight,dt,shot.mode==="cockpit"),shot.sortie);const ambient=ambientGeometry(worldData,shot.sky,1.15)
+;const puffs=[];for(const p of smoke.list)puffs.push({p:p.p,size:p.size*1.75,color:p.fire?[1,.42,.12]:[.52,.52,.5],alpha:.42*Math.min(1,p.life)})
+;for(const p of particles)puffs.push({p:p.p,size:p.size*.85,color:p.fire?[1,.42,.12]:[.72,.64,.5],alpha:(p.fire?.55:.22)*clamp(p.life,0,1)});renderer.uploadClouds(shot.sky.clouds)
 ;renderer.drawFrame({camera:camera,sky:shot.sky,fogColor:fogColorFor(shot.sky),fogDensity:11e-5+shot.sky.storm*15e-5+shot.sky.night*3e-5,terrain:terrainMesh,
-water:waterMesh,runway:runwayMesh,worldMesh:worldMesh,aircraft:{parts:parts},clouds:shot.sky.clouds.length,particles:null});ctx.clearRect(0,0,1280,800)
+water:waterMesh,runway:runwayMesh,worldMesh:worldMesh,aircraft:{parts:parts},clouds:shot.sky.clouds.length,particles:[{vertices:ambient,alpha:1}],puffs:puffs});ctx.clearRect(0,0,1280,800)
 ;const rdo=readouts(shot.flight,heightAt(shot.flight.p.x,shot.flight.p.z));drawHud(ctx,shot.flight,rdo,shot.sortie,shot.sky,camera,{
-cockpit:shot.mode==="cockpit",ribbon:shot.ribbon,dust:particles});drawPanel(ctx,shot.flight,rdo,createPanelState(),dt,{light:true});if(!captured&&elapsed>1.1){
+cockpit:shot.mode==="cockpit",ribbon:shot.ribbon,dust:particles});drawPanel(ctx,shot.flight,rdo,createPanelState(),dt,{light:true});if(shot.crash)drawCrash(ctx,shot.crashCause,elapsed);if(!captured&&elapsed>1.1){
 captured=true;const sheet=document.createElement("canvas");sheet.width=1280;sheet.height=800;const sheetCtx=sheet.getContext("2d")
-;sheetCtx.drawImage(worldCanvas,0,0);sheetCtx.drawImage(hudCanvas,0,0);window.__shotJpeg=sheet.toDataURL("image/jpeg",.88);window.__shotInfo={name:shotName,
+;sheetCtx.filter=shot.filter??"none";sheetCtx.drawImage(worldCanvas,0,0);sheetCtx.filter="none";sheetCtx.drawImage(hudCanvas,0,0);window.__shotJpeg=sheet.toDataURL("image/jpeg",.88);window.__shotInfo={name:shotName,
 ready:true,readouts:shotReadouts(shot),bytes:window.__shotJpeg.length,mode:shot.mode};window.__shotReady=true}}catch(error){
 window.__bootError=String(error&&error.stack?error.stack:error)}}function createPanelState(){if(!runShot.panel)runShot.panel=createInstruments()
 ;return runShot.panel}requestAnimationFrame(shotFrame)}window.addEventListener("pointerdown",()=>audio.unlock(),{once:true})

@@ -126,6 +126,11 @@ export function quatNormalize(q) {
 const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
 return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
 }
+export function quatNlerp(a, b, t) {
+let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+const s = d < 0 ? -1 : 1;
+return quatNormalize([a[0] + (b[0] * s - a[0]) * t, a[1] + (b[1] * s - a[1]) * t, a[2] + (b[2] * s - a[2]) * t, a[3] + (b[3] * s - a[3]) * t]);
+}
 export function quatRotate(q, v) {
 const [x, y, z, w] = q;
 const ix = w * v.x + y * v.z - z * v.y;

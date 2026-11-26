@@ -6,6 +6,36 @@ import{mat4Multiply,mat4Perspective,mat4LookAt,vnorm,vcross}from"./util.js"
 ;const SKY_VS=`#version 300 es\nlayout(location=0) in vec2 aPos;\nout vec2 vNdc;\nvoid main() {\nvNdc = aPos;\ngl_Position = vec4(aPos, 0.9999, 1.0);\n}`
 ;const SKY_FS=`#version 300 es\nprecision highp float;\nin vec2 vNdc;\nuniform vec2 uResolution;\nuniform vec3 uFwd;\nuniform vec3 uRight;\nuniform vec3 uUp;\nuniform vec3 uCamPos;\nuniform vec3 uSunDir;\nuniform vec3 uFog;\nuniform float uTanHalf;\nuniform float uAspect;\nuniform float uStorm;\nuniform float uDawn;\nuniform float uNight;\nuniform float uTime;\nout vec4 outColor;\nfloat hash(vec2 p) {\np = fract(p * vec2(123.34, 456.21));\np += dot(p, p + 45.32);\nreturn fract(p.x * p.y);\n}\nfloat noise(vec2 p) {\nvec2 i = floor(p);\nvec2 f = fract(p);\nf = f * f * (3.0 - 2.0 * f);\nreturn mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);\n}\nfloat fbm(vec2 p) {\nfloat s = 0.0;\nfloat a = 0.5;\nfor (int i = 0; i < 5; i++) {\ns += noise(p) * a;\np = p * 2.03 + vec2(17.1, -9.7);\na *= 0.5;\n}\nreturn s;\n}\nvoid main() {\nvec2 ndc = vNdc;\nvec3 dir = normalize(uFwd + uRight * ndc.x * uTanHalf * uAspect + uUp * ndc.y * uTanHalf);\nfloat h = dir.y;\nvec3 dawnHorizon = vec3(0.949, 0.788, 0.627);\nvec3 dawnMid = vec3(0.561, 0.639, 0.627);\nvec3 dawnZenith = vec3(0.247, 0.369, 0.420);\nvec3 dayHorizon = vec3(0.780, 0.810, 0.760);\nvec3 dayZenith = vec3(0.310, 0.480, 0.570);\nvec3 stormHorizon = vec3(0.557, 0.604, 0.557);\nvec3 stormZenith = vec3(0.141, 0.196, 0.200);\nvec3 nightHorizon = vec3(0.090, 0.120, 0.150);\nvec3 nightZenith = vec3(0.020, 0.035, 0.060);\nvec3 horizon = mix(mix(dawnHorizon, dayHorizon, 1.0 - uDawn), stormHorizon, uStorm);\nvec3 zenith = mix(mix(dawnZenith, dayZenith, 1.0 - uDawn), stormZenith, uStorm);\nhorizon = mix(horizon, nightHorizon, uNight);\nzenith = mix(zenith, nightZenith, uNight);\nvec3 col = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.55));\ncol = mix(col, dawnMid, exp(-abs(h) * 6.0) * 0.25 * (1.0 - uStorm));\nfloat sun = max(dot(dir, uSunDir), 0.0);\nvec3 sunColor = mix(vec3(1.0, 0.93, 0.80), vec3(1.0, 0.66, 0.34), uDawn);\ncol += sunColor * (pow(sun, 900.0) * 1.6 + pow(sun, 14.0) * 0.24) * (1.0 - uStorm * 0.85) * (1.0 - uNight);\nif (dir.y > 0.015) {\nvec2 p1 = uCamPos.xz + dir.xz * (1250.0 / dir.y);\nfloat n1 = fbm(p1 * 0.00052 + vec2(uTime * 0.004, uTime * 0.0015));\nfloat cover = mix(0.54, 0.20, uStorm);\nfloat c1 = smoothstep(cover, cover + 0.20, n1);\nvec2 p2 = uCamPos.xz + dir.xz * (2500.0 / dir.y);\nfloat n2 = fbm(p2 * 0.00033 - vec2(uTime * 0.002, 0.0));\nfloat c2 = smoothstep(0.58, 0.78, n2) * 0.55;\nvec3 cloudLit = mix(vec3(1.0, 0.94, 0.84), vec3(0.95, 0.55, 0.35), uDawn);\nvec3 cloudDark = mix(vec3(0.62, 0.68, 0.70), vec3(0.20, 0.24, 0.24), uStorm);\nvec3 cc = mix(cloudDark, cloudLit, clamp(sun * 2.2, 0.0, 1.0));\ncc *= mix(1.0, 0.45, uNight);\ncol = mix(col, cc, c1 * (0.85 + 0.13 * uStorm));\ncol = mix(col, cc * 0.82, c2);\n}\nif (uStorm > 0.15) {\nfloat band = smoothstep(0.24, 0.0, abs(dir.y - 0.015));\nfloat wall = fbm(vec2(atan(dir.z, dir.x) * 2.6, dir.y * 20.0 + uTime * 0.03));\nvec3 wallColor = mix(vec3(0.30, 0.34, 0.34), vec3(0.56, 0.57, 0.53), wall);\ncol = mix(col, wallColor, band * uStorm * 0.55);\n}\ncol = mix(col, uFog, smoothstep(0.11, -0.04, h));\noutColor = vec4(col, 1.0);\n}`
 
+
+;const PART_VS=`#version 300 es
+layout(location=0) in vec3 aCenter;
+layout(location=1) in vec2 aCorner;
+layout(location=2) in float aSize;
+layout(location=3) in vec3 aColor;
+layout(location=4) in float aAlpha;
+uniform mat4 uViewProj;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
+out vec2 vUv;
+out vec3 vColor;
+out float vAlpha;
+void main() {
+vec3 wp = aCenter + uCamRight * aCorner.x * aSize + uCamUp * aCorner.y * aSize;
+vUv = aCorner;
+vColor = aColor;
+vAlpha = aAlpha;
+gl_Position = uViewProj * vec4(wp, 1.0);
+}`
+;const PART_FS=`#version 300 es
+precision highp float;
+in vec2 vUv;
+in vec3 vColor;
+in float vAlpha;
+out vec4 outColor;
+void main() {
+float d = length(vUv);
+outColor = vec4(vColor, smoothstep(1.0, 0.0, d) * vAlpha);
+}`
 ;const CLOUD_VS=`#version 300 es\nlayout(location=0) in vec3 aCenter;\nlayout(location=1) in vec2 aCorner;\nlayout(location=2) in float aSize;\nlayout(location=3) in float aAlpha;\nuniform mat4 uViewProj;\nuniform vec3 uCamRight;\nuniform vec3 uCamUp;\nuniform vec3 uCamPos;\nuniform float uStorm;\nout vec2 vUv;\nout float vAlpha;\nout float vDepth;\nvoid main() {\nvec3 wp = aCenter + uCamRight * aCorner.x * aSize + uCamUp * aCorner.y * aSize * 0.42;\nvUv = aCorner * 0.5 + 0.5;\nvAlpha = aAlpha * (0.55 + 0.45 * uStorm);\nvDepth = length(wp - uCamPos);\ngl_Position = uViewProj * vec4(wp, 1.0);\n}`
 
 ;const CLOUD_FS=`#version 300 es\nprecision highp float;\nin vec2 vUv;\nin float vAlpha;\nin float vDepth;\nuniform sampler2D uTex;\nuniform vec3 uFog;\nuniform float uStorm;\nuniform float uDawn;\nuniform float uNight;\nout vec4 outColor;\nvoid main() {\nvec4 tex = texture(uTex, vUv);\nfloat a = tex.a * vAlpha * smoothstep(12000.0, 3500.0, vDepth);\nvec3 col = mix(vec3(1.0, 0.96, 0.90), vec3(0.96, 0.58, 0.40), uDawn);\ncol = mix(col, vec3(0.42, 0.46, 0.46), uStorm * 0.8);\ncol *= mix(1.0, 0.4, uNight);\noutColor = vec4(col, a);\n}`
@@ -19,12 +49,13 @@ const canvas=document.createElement("canvas");canvas.width=128;canvas.height=128
 ;const r=10+i%4*5;const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,"rgba(255,255,255,0.34)");g.addColorStop(1,"rgba(255,255,255,0)")
 ;ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}return canvas}export function createRenderer(canvas){const gl=canvas.getContext("webgl2",{antialias:true,
 alpha:false,powerPreference:"high-performance"});if(!gl)throw new Error("WebGL2 is required");const worldProgram=program(gl,WORLD_VS,WORLD_FS)
-;const skyProgram=program(gl,SKY_VS,SKY_FS);const cloudProgram=program(gl,CLOUD_VS,CLOUD_FS);const worldU={}
+;const skyProgram=program(gl,SKY_VS,SKY_FS);const cloudProgram=program(gl,CLOUD_VS,CLOUD_FS);const partProgram=program(gl,PART_VS,PART_FS);const worldU={}
 ;for(const name of["uViewProj","uModel","uSunDir","uFogColor","uCamPos","uFogDensity","uStorm","uNight","uAlpha"]){
 worldU[name]=gl.getUniformLocation(worldProgram,name)}const skyU={}
 ;for(const name of["uResolution","uFwd","uRight","uUp","uCamPos","uSunDir","uFog","uTanHalf","uAspect","uStorm","uDawn","uNight","uTime"]){
 skyU[name]=gl.getUniformLocation(skyProgram,name)}const cloudU={}
-;for(const name of["uViewProj","uCamRight","uCamUp","uCamPos","uStorm","uTex","uFog","uDawn","uNight"]){cloudU[name]=gl.getUniformLocation(cloudProgram,name)}
+;for(const name of["uViewProj","uCamRight","uCamUp","uCamPos","uStorm","uTex","uFog","uDawn","uNight"]){cloudU[name]=gl.getUniformLocation(cloudProgram,name)}const partU={}
+;for(const name of["uViewProj","uCamRight","uCamUp"]){partU[name]=gl.getUniformLocation(partProgram,name)}
 const skyVao=gl.createVertexArray();gl.bindVertexArray(skyVao);const skyBuffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,skyBuffer)
 ;gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0)
 ;const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cloudTexture())
@@ -34,10 +65,18 @@ const skyVao=gl.createVertexArray();gl.bindVertexArray(skyVao);const skyBuffer=g
 ;gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,36,0)
 ;gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,36,12);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,3,gl.FLOAT,false,36,24)
 ;return{vao:vao,count:vertices.length/9}}const cloudVao=gl.createVertexArray();const cloudBuffer=gl.createBuffer();const particleVao=gl.createVertexArray()
-;const particleBuffer=gl.createBuffer();function drawParticles(vertices){gl.bindVertexArray(particleVao);gl.bindBuffer(gl.ARRAY_BUFFER,particleBuffer)
+;const particleBuffer=gl.createBuffer();const puffVao=gl.createVertexArray();const puffBuffer=gl.createBuffer();function drawParticles(vertices,alpha){gl.bindVertexArray(particleVao);gl.bindBuffer(gl.ARRAY_BUFFER,particleBuffer)
 ;gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.DYNAMIC_DRAW);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,36,0)
 ;gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,36,12);gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,3,gl.FLOAT,false,36,24)
-;gl.drawArrays(gl.TRIANGLES,0,vertices.length/9)}function uploadClouds(clouds){const data=[];for(const cloud of clouds){
+;gl.uniform1f(worldU.uAlpha,alpha);gl.drawArrays(gl.TRIANGLES,0,vertices.length/9)}function drawPuffs(puffs,camera){if(!puffs||puffs.length===0)return;const data=[];const corners=[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]]
+for(const puff of puffs){const dx=puff.p.x-camera.eye.x,dy=puff.p.y-camera.eye.y,dz=puff.p.z-camera.eye.z;const size=Math.min(puff.size,Math.sqrt(dx*dx+dy*dy+dz*dz)*.11);for(const[cx,cy]of corners)data.push(puff.p.x,puff.p.y,puff.p.z,cx,cy,size,puff.color[0],puff.color[1],puff.color[2],puff.alpha)}
+gl.useProgram(partProgram);gl.uniformMatrix4fv(partU.uViewProj,false,camera.viewProj);gl.uniform3f(partU.uCamRight,camera.right.x,camera.right.y,camera.right.z)
+gl.uniform3f(partU.uCamUp,camera.up.x,camera.up.y,camera.up.z);gl.bindVertexArray(puffVao);gl.bindBuffer(gl.ARRAY_BUFFER,puffBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW)
+gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,40,0);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,40,12)
+gl.enableVertexAttribArray(2);gl.vertexAttribPointer(2,1,gl.FLOAT,false,40,20);gl.enableVertexAttribArray(3);gl.vertexAttribPointer(3,3,gl.FLOAT,false,40,24)
+gl.enableVertexAttribArray(4);gl.vertexAttribPointer(4,1,gl.FLOAT,false,40,36);gl.disable(gl.CULL_FACE);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA)
+gl.depthMask(false);gl.drawArrays(gl.TRIANGLES,0,data.length/10);gl.depthMask(true);gl.disable(gl.BLEND);gl.enable(gl.CULL_FACE)}
+function uploadClouds(clouds){const data=[];for(const cloud of clouds){
 const corners=[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]];for(const[cx,cy]of corners)data.push(cloud.x,cloud.y,cloud.z,cx,cy,cloud.size,cloud.alpha)}
 gl.bindVertexArray(cloudVao);gl.bindBuffer(gl.ARRAY_BUFFER,cloudBuffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW)
 ;gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,28,0);gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,2,gl.FLOAT,false,28,12)
@@ -60,8 +99,8 @@ if(!mesh)return;gl.uniformMatrix4fv(worldU.uModel,false,model);gl.uniform1f(worl
 ;if(frame.aircraft){for(const part of frame.aircraft.parts){if((part.alpha??1)>=.999)drawWorldMesh(part.mesh,part.model,1,sky.night)}
 const transparent=frame.aircraft.parts.filter(part=>(part.alpha??1)<.999);if(transparent.length>0){gl.enable(gl.BLEND)
 ;gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);for(const part of transparent)drawWorldMesh(part.mesh,part.model,part.alpha,sky.night)
-;gl.depthMask(true);gl.disable(gl.BLEND)}}if(frame.particles&&frame.particles.length>0){gl.uniformMatrix4fv(worldU.uModel,false,identity)
-;gl.uniform1f(worldU.uAlpha,.55);gl.uniform1f(worldU.uNight,sky.night);drawParticles(frame.particles)}gl.enable(gl.BLEND)
+;gl.depthMask(true);gl.disable(gl.BLEND)}}if(frame.particles&&frame.particles.length>0){gl.disable(gl.CULL_FACE);gl.uniformMatrix4fv(worldU.uModel,false,identity);gl.uniform1f(worldU.uNight,sky.night)
+for(const batch of frame.particles){if(batch&&batch.vertices&&batch.vertices.length>0){if((batch.alpha??1)<.999)gl.depthMask(false);drawParticles(batch.vertices,batch.alpha??1);gl.depthMask(true)}}gl.enable(gl.CULL_FACE)}drawPuffs(frame.puffs,camera);gl.enable(gl.BLEND)
 ;gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.disable(gl.CULL_FACE);gl.useProgram(cloudProgram)
 ;gl.uniformMatrix4fv(cloudU.uViewProj,false,camera.viewProj);gl.uniform3f(cloudU.uCamRight,camera.right.x,camera.right.y,camera.right.z)
 ;gl.uniform3f(cloudU.uCamUp,camera.up.x,camera.up.y,camera.up.z);gl.uniform3f(cloudU.uCamPos,camera.eye.x,camera.eye.y,camera.eye.z)
@@ -72,5 +111,3 @@ uploadMesh:uploadMesh,uploadClouds:uploadClouds,resize:resize,drawFrame:drawFram
 const right=vnorm(vcross(fwd,up));const trueUp=vcross(right,fwd);const view=mat4LookAt(eye,{x:eye.x+fwd.x,y:eye.y+fwd.y,z:eye.z+fwd.z},trueUp)
 ;const proj=mat4Perspective(fov*Math.PI/180,aspect,.35,14e3);const viewProj=mat4Multiply(proj,view);return{eye:eye,fwd:fwd,right:right,up:trueUp,fov:fov,
 aspect:aspect,near:.35,far:14e3,view:view,proj:proj,viewProj:viewProj}}
-export function drawFrame(renderer, frame) { renderer.drawFrame(frame); }
-export function resize(renderer, width, height) { renderer.resize(width, height); }

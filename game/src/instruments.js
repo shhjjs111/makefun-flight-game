@@ -96,7 +96,7 @@ const label=hurt[0]==="leftWing"?"L WING":hurt[0]==="rightWing"?"R WING":hurt[0]
 ;text(ctx,`${label} ${Math.round(hurt[1])}%`,1178,780,'700 9px "Consolas", monospace',LAMP_RED)}const lampY=648
 ;lamp(ctx,46,lampY,"STALL",rdo.stalled||rdo.alphaDeg>14,LAMP_RED);lamp(ctx,96,lampY,"FUEL",rdo.fuelLow,LAMP_AMBER);lamp(ctx,146,lampY,"OIL",rdo.oilLow,LAMP_RED)
 ;lamp(ctx,196,lampY,"GEAR",rdo.gearDown&&!rdo.onGround,LAMP_GREEN);lamp(ctx,246,lampY,"GEAR",rdo.gearDown&&!rdo.onGround,LAMP_GREEN)
-;lamp(ctx,296,lampY,"GEAR",rdo.gearDown&&!rdo.onGround,LAMP_GREEN);lamp(ctx,346,lampY,"DOOR",flight.cargoDoorOpen===true,LAMP_AMBER)
+;lamp(ctx,296,lampY,"GEAR",rdo.gearDown&&!rdo.onGround,LAMP_GREEN);lamp(ctx,346,lampY,"DOOR",Boolean(flight.cargoDoorOpen),LAMP_AMBER)
 ;lamp(ctx,396,lampY,"LEAN",flight.lean,LAMP_GREEN);lamp(ctx,446,lampY,"BRAKE",flight.brakes>.1,LAMP_RED);ctx.fillStyle="rgba(176,138,62,0.18)"
 ;ctx.fillRect(520,762,240,24);ctx.strokeStyle=BRASS;ctx.lineWidth=1;ctx.strokeRect(520,762,240,24)
 ;text(ctx,"MONSOON POST · KP-04",640,774,'700 11px "Consolas", monospace',"#D8B96A");if(opts.light!==false){ctx.save();ctx.globalCompositeOperation="lighter"
