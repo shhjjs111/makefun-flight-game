@@ -1,4 +1,3 @@
-// Keyboard and mouse to aircraft controls: an absolute virtual stick, keys, queued one-shots.
 import{clamp}from'./util.js';
 export const ACTION_DROP=1;
 export const ACTION_FLAP=2;

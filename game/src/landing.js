@@ -1,4 +1,3 @@
-// The ground: touchdown detection, the landing grade, the rollout and the plain cause of a crash.
 import{clamp}from'./util.js';
 const CLEARANCE=1.55;
 

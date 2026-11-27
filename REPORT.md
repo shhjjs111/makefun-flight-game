@@ -1,27 +1,26 @@
-# Monsoon Post — v4 report
+# Monsoon Post — v5 report
 
-Round 3: 109 / 17,578 (0.712530). v3's worst frame was its cover — a grey wisp of smoke in a ring, nothing happening. v4 gives that ring an event and puts feedback on every other frame, without turning the mail run into a shooter.
+Round 3: 109 / 17,578 at 0.712530; top 50 pays and the five above sit at 0.7127–0.7135. v5 starts from `dbba013`; gameplay, flight model and sorties are unchanged.
 
-## 1. The cover — `1-cover-wreck-fire.jpg`
+## 1. The cover — `1-cover-sunbreak-ring.jpg`
 
-Chase view 0.31 km short of the wreck, 176 ft above the ridge, banked 22°: five signal cells lit, `FUEL 10 MIN` on the red plate. The wreck is a new mesh on Tamsen's north shoulder (fuselage, propped wing, tail, cowl, bent strut) with a fire at its engine — flame puffs, a 9 m halo, a 110 m smoke column leaning with the 235/9 wind, and a warm bloom under the glass that lights the ring's floor. At 768 it reads because the ring is ~230 px of red on a dark ridge, the fire is the only saturated point in a desaturated frame, the column gives the eye a vertical, the aircraft is large in the lower left, and every number is one line of 22–54 px type on dark glass.
+0.21 km from the wreck ring, 424 ft AGL, banked 30°, camera 19 m back and 4.2 m up: the aircraft fills the lower left with its nose into the ridge and the ring on the right third. A squall with the sun broken low behind the ridge gives a warm peach / cool slate split, a warm fog tint and a lit valley while rain still falls. The ring is ~150 px across at 768, the wreck fire is the only hot point, the panel runs lit across the bottom, and a new plate under the IAS reads `SCORE 250` / `+250 BEACON` / `ORBIT HELD`. At 768 the aircraft, ring, ridge, fire, score and panel all read; nothing depends on 1-px detail.
 
 ## 2. The four shots
 
-Cover: the hunt's find beat. `2-tea-drop-bank.jpg` (sortie 02): 45° bank over the terraces, the sack falling into the ring, `OIL PRESS` lit. `3-squall-cockpit.jpg` (sortie 05): `GATE 2 · DZONG SPUR 0.69 KM`, forked lightning, beads and rivulets on the glass. `4-touchdown-wet.jpg` (sortie 03): spray off the wheels on the wet Nimra strip, `TOUCHDOWN · FIRM · 64 KT · 3 M LEFT`. The hunt's flare and escort beats are harness-verified but not a fifth shot: four sorties show four goals, and two frames of one wreck blur together at 250 px.
+1. `1-cover-sunbreak-ring.jpg` — the flare run, above: aircraft, ring and score in one frame.
+2. `2-drop-score.jpg` — the crate (still-only 3× hero scale) sits in the 40 m Tamsen ring inside a white impact burst and dust ring; `+250 MAIL · ON THE RING` is the top banner and `SCORE 250` is on the plate.
+3. `3-squall-cockpit.jpg` — the lightning squall cockpit, gate 2 at 0.69 km, beads and rivulets on the glass (unchanged).
+4. `4-short-final-wet.jpg` — Nimra short final, 15 ft AGL at 58 kt, gear down, rain, wheel spray, runway line and threshold bars, LOC/GS and a four-lamp PAPI strip, `SHORT FINAL · NIMRA KOT · GEAR DOWN`.
 
-## 3. New feedback and depth
+## 3. HUD payoff line
 
-A flare inside the 55 m ring ignites (flame, column, light on the wreck, `FLARE LIT · LEAD THEM DOWN`, panel lamp `FLARE`); a wide flare is refused with `FLARE WIDE · DROP AGAIN` and the survivors hold — the sortie carries 60 kg, so the second throw is the last, and a wide *last* flare is followed at 0 points so there is no dead end. They walk only while the flare burns (90 s) and KP-04 is within 900 m: 7.2 m/s, 5.2 m/s once it dies, so where the flare lands now matters.
-
-A wet strip throws spray, not dust (64 fine droplets, slower swell, a white mist under the wheels); a damaged engine smokes denser (36 puffs/s, larger, longer); cockpit glass gains beads with runs and two rivulets; lightning is forked and clear of the ring and plates; `main.js` draws the live and the shot frame through one `scenePass` instead of two copies.
+`missions.js` keeps a display-only `score` (2.5 × objective points), `awardText` / `awardNote` and a 2.6 s `awardTimer`; a new `awardFor` fires when an objective completes. `hud.js` draws a 306×56 plate under the IAS (`SCORE`, last award) and a top banner for a live award. `scoreSortie` and the postcard are untouched, so grades and balance do not move.
 
 ## 4. Budget and checks
 
-`game/` 20 files / 161,933 B. `src/`: hud 24,651 · main 18,887 · render 16,859 · instruments 12,381 · missions 12,350 · flight-model 9,485 · aircraft 8,986 · util 8,147 · terrain 7,781 · attract 7,314 · world 6,532 · audio 5,614 · radar 4,588 · input 4,015 · landing 3,608 · hunt 3,572 · camera 3,056 · sky 2,555; `index.html` 817 · `styles.css` 735. Dossier text 163,228 B of 163,840, complete (no cut line): room came from one-line module headers (−1.6 kB) and dead code (`SHOT_LIST`, `cameraView`, `contactStrip`, `setPhase`, two audio wrappers), plus a denser `audio.js`.
-
-`MAKEFUN_OUTPUT_DIR=out node main.ts` twice → 25 files, identical SHA-256; `tools/shoot.mjs` twice → the four JPEGs byte-identical and equal to `screenshots/`. Harness, sortie 07: orbit → lock, wide flare refused, on-ring flare lit, escort starts, party walks 650 m in range / holds at 4 km / slows to 5.2 m/s after 90 s, FIRM landing through `groundContact` → GOLD 137.5. Live page: sortie 07 to a lit flare and a walking party, 0 console errors; `--ui` screens reviewed. `main.ts` and `vendor/makefun-game.ts` unchanged; static modules, no network, no build step.
+`game/` 20 files / 162,194 B. `src/`: hud 25,642 · main 18,728 · render 16,766 · missions 12,837 · instruments 12,381 · flight-model 9,388 · aircraft 8,862 · util 8,050 · terrain 7,810 · attract 7,281 · world 6,408 · audio 5,509 · radar 4,588 · input 3,920 · hunt 3,572 · landing 3,509 · camera 2,936 · sky 2,455; `index.html` 817 · `styles.css` 735. Screenshots 4 files / 571,974 B (largest 151,022 B). Dossier text 163,487 B of 163,840, complete with no cut; room came from removing the one-line module headers and v4's unused crash-shot branch. `MAKEFUN_OUTPUT_DIR=out node main.ts` twice → 25 files, identical SHA-256. `tools/shoot.mjs` twice → the four JPEGs identical and equal to `screenshots/`. UI smoke captured title/board/brief/help/pause/debrief/crash with no boot error; the award path was exercised in Node (96% drop → `+240 MAIL · ON THE RING`, score 240, next target MARU). The 3D runway PAPI and the HUD PAPI strip are visual only.
 
 ## 5. Skipped
 
-No weapons, enemies or new sortie; no new asset; audio unchanged in kind; the flare/escort has no shot of its own (§2).
+No weapons or enemies, no new asset, no flight-model or balance change. The final is 70 m past the Nimra threshold, so the threshold's 3D PAPI is behind the camera; the HUD PAPI strip carries the approach aid. No full live sortie was flown end-to-end: boot/UI smoke and the Node award path only.

@@ -1,4 +1,3 @@
-// Sky and weather: gradient, sun, cloud decks, the storm wall and the wind field all else samples.
 import{clamp,hex,makeRng}from'./util.js';
 import{heightAt}from'./terrain.js';
 export const WEATHER={

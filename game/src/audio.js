@@ -1,4 +1,3 @@
-// Every sound in the game, synthesised in WebAudio: engine, wind, rain, horn, gear, tyres and the bell.
 import{clamp}from'./util.js';
 function noiseBuffer(ctx,seconds=2){const buffer=ctx.createBuffer(1,ctx.sampleRate*seconds,ctx.sampleRate),data=buffer.getChannelData(0);let last=0;for(let i=0;i<data.length;i+=1){const white=Math.random()*2-1;last=last*.72+white*.28;data[i]=last}return buffer}
 function filter(ctx,type,frequency,q){const node=ctx.createBiquadFilter();node.type=type;node.frequency.value=frequency;if(q)node.Q.value=q;return node}

@@ -1,6 +1,6 @@
 [
-  { "name": "1-cover-wreck-fire.jpg", "query": "?shot=cover&seed=7" },
-  { "name": "2-tea-drop-bank.jpg", "query": "?shot=drop&seed=7" },
+  { "name": "1-cover-sunbreak-ring.jpg", "query": "?shot=cover&seed=7" },
+  { "name": "2-drop-score.jpg", "query": "?shot=drop&seed=7" },
   { "name": "3-squall-cockpit.jpg", "query": "?shot=storm&seed=7" },
-  { "name": "4-touchdown-wet.jpg", "query": "?shot=touchdown&seed=7" }
+  { "name": "4-short-final-wet.jpg", "query": "?shot=final&seed=7" }
 ]

@@ -84,10 +84,12 @@ field, the four strips, the aircraft's flown track, the beacon and this leg's ta
 
 ## Captures
 
-`?shot=cover|drop|storm|touchdown&seed=7` stages the real flight model with a scripted pilot from a
-fixed seed and freezes on a state predicate; the cover is the beacon hunt, banked in over the ridge
-with the wreck burning inside the drop ring, its smoke column and a lit `FUEL 10 MIN`. The other three
-are a tea drop in a 45° bank, a squall pass through gate 2 from the cockpit, and a spray-throwing
-touchdown on the wet Nimra strip. `tools/shoot.mjs` drives headless Edge/Chrome over the DevTools
+`?shot=cover|drop|storm|final&seed=7` stages the real flight model with a scripted pilot from a
+fixed seed and freezes on a state predicate; the cover is the beacon hunt, banked 30° in over the
+ridge with the sun broken behind it, the wreck burning inside the drop ring and `SCORE 250` /
+`+250 BEACON` on the HUD. The other three are a scored drop at Upper Tamsen with the crate splashing
+into the ring and `+250 MAIL · ON THE RING` in the HUD, a squall pass through gate 2 from the
+cockpit, and a 58 kt Nimra short final with gear, rain, wheel spray, LOC/GS and a four-lamp PAPI
+strip. `tools/shoot.mjs` drives headless Edge/Chrome over the DevTools
 protocol, waits for `window.__shotReady`, and writes the game's own JPEG. `shots.json` names the four
 finals.
