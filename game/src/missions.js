@@ -1,8 +1,6 @@
 // The route board's six sorties, their objectives and the scoring behind the postcard: land, drop
-import{STRIPS,stripSurfaceY}from"./terrain.js";export const RINGS={tamsen:{x:430,y:660,z:-880,radius:40,label:"UPPER TAMSEN"},maru:{x:1860,y:442,z:160,radius:40,label:"MARU"
-},nimra:{x:-1700,y:606,z:260,radius:40,label:"NIMRA"},bridge:{x:2020,y:430,z:520,radius:40,label:"BROKEN BRIDGE"}};export const GATES=[{x:-60,y:930,z:-2050,
-radius:90,label:"GATE 1 · RIVER BEND"},{x:260,y:1020,z:-2280,radius:90,label:"GATE 2 · DZONG SPUR"},{x:560,y:1110,z:-2500,radius:90,label:"GATE 3 · PASS HEAD"
-},{x:180,y:980,z:-2650,radius:90,label:"GATE 4 · NORTH WALL"}];export const MISSIONS=[{id:1,code:"SORTIE 01",name:"First Light Mail",weather:"CLEAR",dawn:.9,
+import{STRIPS,heightAt,stripSurfaceY}from"./terrain.js";import{BEACON,BATTERY,createHunt,stepHunt,startEscort}from"./hunt.js";export const RINGS={tamsen:{x:430,y:660,z:-880,radius:40,label:"UPPER TAMSEN"},maru:{x:1860,y:442,z:160,radius:40,label:"MARU"},nimra:{x:-1700,y:606,z:260,radius:40,label:"NIMRA"},bridge:{x:2020,y:430,z:520,radius:40,label:"BROKEN BRIDGE"}};export const GATES=[{x:-60,y:930,z:-2050,
+radius:90,label:"GATE 1 · RIVER BEND"},{x:260,y:1020,z:-2280,radius:90,label:"GATE 2 · DZONG SPUR"},{x:560,y:1110,z:-2500,radius:90,label:"GATE 3 · PASS HEAD"},{x:180,y:980,z:-2650,radius:90,label:"GATE 4 · NORTH WALL"}];export const MISSIONS=[{id:1,code:"SORTIE 01",name:"First Light Mail",weather:"CLEAR",dawn:.9,
 night:0,start:"suli",fuelPct:.7,cargo:120,par:420,
 brief:"The pass is still open. Land at Tamsen Ridge, put two sacks on the strip, then bring KP-04 home to Suli before the valley fog lifts.",
 weatherLine:"dawn, clear, light westerly · ceiling 4,000 m",objectives:[{type:"land",strip:"tamsen",label:"LAND TAMSEN 27",detail:"land, 620 m ridge strip"},{
@@ -28,41 +26,31 @@ type:"gate",gate:3,label:"GATE 4 · NORTH WALL",detail:"fly through the ring"}],
 name:"Last Mail Before the Rain",weather:"STORM",dawn:0,night:.85,start:"suli",fuelPct:.55,cargo:120,par:480,
 brief:"The last two sacks before the pass closes for four months. Drop at Maru and Nimra, then land at Suli on the lights in a 12 m/s crosswind. There is no alternate.",
 weatherLine:"storm wall 2.5 km · 12 m/s · night landing",objectives:[{type:"drop",ring:"maru",label:"DROP · MARU",detail:"ring 40 m"},{type:"drop",ring:"nimra",
-label:"DROP · NIMRA",detail:"ring 40 m"},{type:"land",strip:"suli",label:"LAND SULI ON THE LIGHTS",detail:"night, crosswind"}],gold:120,silver:90,bronze:60}]
-;function ringFor(name){return RINGS[name]??RINGS.tamsen}function stripFor(id){return STRIPS.find(strip=>strip.id===id)??STRIPS[0]}
+label:"DROP · NIMRA",detail:"ring 40 m"},{type:"land",strip:"suli",label:"LAND SULI ON THE LIGHTS",detail:"night, crosswind"}],gold:120,silver:90,bronze:60},{
+id:7,code:"SORTIE 07",name:"Beacon in the Storm",weather:"STORM",dawn:.16,night:0,start:"suli",fuelPct:.8,cargo:60,par:720,
+brief:"A relief flight went down on Tamsen's north shoulder with the doctor's kit aboard. Find the beacon, hold an orbit over the wreck, put a flare on it, then shadow the two survivors down the mule track to Tamsen and set down to take them out.",
+weatherLine:"storm wall 2 km · 12 m/s · beacon battery 13 min",objectives:[{type:"beacon",ring:"wreck",label:"FIND THE BEACON · WRECK SITE",
+detail:"orbit inside 300 m, 5 s"},{type:"drop",ring:"wreck",label:"FLARE · WRECK SITE",detail:"ring 55 m"},{
+type:"escort",label:"LEAD THEM DOWN · TAMSEN",detail:"stay within 900 m"},{type:"land",strip:"tamsen",label:"LAND TAMSEN 27",
+detail:"take them out"}],gold:124,silver:94,bronze:64}];function ringFor(name){if(name==="wreck")return{x:BEACON.x,y:heightAt(BEACON.x,BEACON.z)+1.6,z:BEACON.z,radius:BEACON.radius,label:BEACON.label};return RINGS[name]??RINGS.tamsen}function stripFor(id){return STRIPS.find(strip=>strip.id===id)??STRIPS[0]}
 export function createSortie(mission){const objectives=mission.objectives.map(objective=>({...objective,done:false,score:0,tries:0,
-ring:objective.ring?ringFor(objective.ring):null,gate:objective.gate!==undefined?GATES[objective.gate]:null,strip:objective.strip?stripFor(objective.strip):null
-}));return{mission:mission,objectives:objectives,index:0,time:0,sacks:[],objectiveScores:[],finished:false,result:null,cargo:mission.cargo,target:null,
-message:"",messageTimer:0,legStart:0,touchdown:null,drops:0}}export function targetInfo(sortie){const objective=sortie.objectives[sortie.index]
-;if(!objective)return null;if(objective.type==="drop"||objective.type==="gate"){const ring=objective.ring??objective.gate;return{kind:objective.type,x:ring.x,
-y:ring.y,z:ring.z,radius:ring.radius,label:ring.label}}const strip=objective.strip;return{kind:"land",x:strip.x+strip.length/2-40,y:stripSurfaceY(strip,strip.x+strip.length/2-40)+2,z:strip.z,
-radius:24,label:`${strip.name.toUpperCase()} 27`,strip:strip}}export function tryDrop(sortie,flight){const objective=sortie.objectives[sortie.index]
-;if(!objective||objective.type!=="drop"||sortie.cargo<=0)return false;const target=objective.ring;sortie.cargo=Math.max(0,sortie.cargo-30);sortie.drops+=1
-;sortie.sacks.push({p:{x:flight.p.x,y:flight.p.y-1.4,z:flight.p.z},v:{x:flight.v.x*.94,y:flight.v.y-1.2,z:flight.v.z*.94},age:0,target:target,evaluated:false,
-accuracy:0,landed:false});return true}function evaluateSack(sortie,sack){const dx=sack.p.x-sack.target.x;const dy=sack.p.y-sack.target.y
-;const dz=sack.p.z-sack.target.z;const distance=Math.sqrt(dx*dx+dz*dz+dy*dy*.15);sack.accuracy=Math.round(100*Math.max(0,1-distance/sack.target.radius)**1.5)
-;sack.distance=distance;sack.evaluated=true;const objective=sortie.objectives[sortie.index];if(objective&&objective.type==="drop"&&!objective.done){
+ring:objective.ring?ringFor(objective.ring):null,gate:objective.gate!==undefined?GATES[objective.gate]:null,strip:objective.strip?stripFor(objective.strip):null}));return{mission:mission,objectives:objectives,index:0,time:0,sacks:[],objectiveScores:[],finished:false,result:null,cargo:mission.cargo,target:null,
+message:"",messageTimer:0,legStart:0,touchdown:null,drops:0,hunt:mission.id===7?createHunt():null}}export function targetInfo(sortie){const objective=sortie.objectives[sortie.index];if(!objective)return null;if(objective.type==="drop"||objective.type==="gate"){const ring=objective.ring??objective.gate;return{kind:objective.type,x:ring.x,
+y:ring.y,z:ring.z,radius:ring.radius,label:ring.label}}
+if(objective.type==="beacon"&&sortie.hunt){const b=sortie.hunt.beacon;return{kind:"beacon",x:b.x,y:b.y,z:b.z,radius:objective.ring.radius,label:objective.ring.label}}
+if(objective.type==="escort"&&sortie.hunt){const p=sortie.hunt.party;return{kind:"escort",x:p.x,y:p.y,z:p.z,radius:70,label:"SURVIVORS"}}const strip=objective.strip;return{kind:"land",x:strip.x+strip.length/2-40,y:stripSurfaceY(strip,strip.x+strip.length/2-40)+2,z:strip.z,
+radius:24,label:`${strip.name.toUpperCase()} 27`,strip:strip}}export function tryDrop(sortie,flight){const objective=sortie.objectives[sortie.index];if(!objective||objective.type!=="drop"||sortie.cargo<=0)return false;const target=objective.ring;sortie.cargo=Math.max(0,sortie.cargo-30);sortie.drops+=1;sortie.sacks.push({p:{x:flight.p.x,y:flight.p.y-1.4,z:flight.p.z},v:{x:flight.v.x*.94,y:flight.v.y-1.2,z:flight.v.z*.94},age:0,target:target,evaluated:false,
+accuracy:0,landed:false});return true}function evaluateSack(sortie,sack){const dx=sack.p.x-sack.target.x;const dy=sack.p.y-sack.target.y;const dz=sack.p.z-sack.target.z;const distance=Math.sqrt(dx*dx+dz*dz+dy*dy*.15);sack.accuracy=Math.round(100*Math.max(0,1-distance/sack.target.radius)**1.5);sack.distance=distance;sack.evaluated=true;const objective=sortie.objectives[sortie.index];if(objective&&objective.type==="drop"&&!objective.done){
 objective.tries+=1;objective.done=true;objective.score=sack.accuracy;sortie.objectiveScores.push({label:objective.label,points:sack.accuracy,
-note:`${Math.round(distance)} m from the ring`});sortie.message=sack.accuracy>70?"ON THE MARK":sack.accuracy>35?"NEAR ENOUGH":"WIDE";sortie.messageTimer=2.5
-;sortie.index+=1;sortie.legStart=sortie.time}}export function updateObjectives(sortie,flight,dt,contact=null,groundHeight=null){if(sortie.finished)return true
-;sortie.time+=dt;if(sortie.messageTimer>0)sortie.messageTimer-=dt;for(const sack of sortie.sacks){if(sack.evaluated)continue;sack.age+=dt;sack.v.y-=9.81*dt
-;sack.p.x+=sack.v.x*dt;sack.p.y+=sack.v.y*dt;sack.p.z+=sack.v.z*dt;const ground=groundHeight?groundHeight(sack.p.x,sack.p.z):0;if(sack.p.y<=ground+.3){
+note:`${Math.round(distance)} m from the ring`});sortie.message=sack.accuracy>70?"ON THE MARK":sack.accuracy>35?"NEAR ENOUGH":"WIDE";sortie.messageTimer=2.5;sortie.index+=1;sortie.legStart=sortie.time;if(sortie.hunt)startEscort(sortie.hunt)}}export function updateObjectives(sortie,flight,dt,contact=null,groundHeight=null){if(sortie.finished)return true;sortie.time+=dt;if(sortie.messageTimer>0)sortie.messageTimer-=dt;if(sortie.hunt){const hunt=stepHunt(sortie,flight,dt);if(hunt.justFound){hunt.justFound=false;sortie.message="BEACON LOCKED · ORBIT HELD";sortie.messageTimer=2.8}if(hunt.justArrived){hunt.justArrived=false;sortie.message="SURVIVORS AT TAMSEN";sortie.messageTimer=3}}for(const sack of sortie.sacks){if(sack.evaluated)continue;sack.age+=dt;sack.v.y-=9.81*dt;sack.p.x+=sack.v.x*dt;sack.p.y+=sack.v.y*dt;sack.p.z+=sack.v.z*dt;const ground=groundHeight?groundHeight(sack.p.x,sack.p.z):0;if(sack.p.y<=ground+.3){
 sack.p.y=ground+.3;sack.landed=true}if(sack.landed||sack.age>8)evaluateSack(sortie,sack)}const objective=sortie.objectives[sortie.index];if(!objective){
-completeSortie(sortie,flight);return true}if(objective.type==="gate"){const gate=objective.gate;const dx=flight.p.x-gate.x;const dy=flight.p.y-gate.y
-;const dz=flight.p.z-gate.z;if(dx*dx+dy*dy+dz*dz<gate.radius*gate.radius){objective.done=true;objective.score=100;sortie.objectiveScores.push({
-label:objective.label,points:100,note:"through the gate"});sortie.message="PHOTOGRAPHED";sortie.messageTimer=2;sortie.index+=1;sortie.legStart=sortie.time}
-}else if(objective.type==="land"&&contact){const strip=objective.strip;if(contact.strip&&contact.strip.id===strip.id&&contact.grade.grade!=="CRASH"){
+completeSortie(sortie,flight);return true}if(objective.type==="beacon"){const hunt=sortie.hunt;if(hunt&&hunt.found){objective.done=true;objective.score=Math.round(55+45*hunt.power/BATTERY);sortie.objectiveScores.push({label:objective.label,points:objective.score,note:"orbit held"});sortie.index+=1;sortie.legStart=sortie.time}}
+else if(objective.type==="escort"){const hunt=sortie.hunt;if(hunt&&hunt.party.arrived&&hunt.near){objective.done=true;objective.score=100;sortie.objectiveScores.push({label:objective.label,points:100,note:"both survivors down"});sortie.message="THEY ARE DOWN · TAMSEN";sortie.messageTimer=2.6;sortie.index+=1;sortie.legStart=sortie.time}}else if(objective.type==="gate"){const gate=objective.gate;const dx=flight.p.x-gate.x;const dy=flight.p.y-gate.y;const dz=flight.p.z-gate.z;if(dx*dx+dy*dy+dz*dz<gate.radius*gate.radius){objective.done=true;objective.score=100;sortie.objectiveScores.push({
+label:objective.label,points:100,note:"through the gate"});sortie.message="PHOTOGRAPHED";sortie.messageTimer=2;sortie.index+=1;sortie.legStart=sortie.time}}else if(objective.type==="land"&&contact){const strip=objective.strip;if(contact.strip&&contact.strip.id===strip.id&&contact.grade.grade!=="CRASH"){
 objective.done=true;objective.score=contact.grade.points;sortie.objectiveScores.push({label:objective.label,points:contact.grade.points,
-note:contact.grade.grade.toLowerCase()});sortie.touchdown=contact;sortie.message=contact.grade.grade;sortie.messageTimer=2.5;sortie.index+=1
-;sortie.legStart=sortie.time;if(sortie.mission.id===3&&sortie.index===1){flight.cargo+=80;sortie.cargo=flight.cargo;sortie.cargoNote="+80 KG PATIENT"}if(objective.strip.id!=="suli"){
+note:contact.grade.grade.toLowerCase()});sortie.touchdown=contact;sortie.message=contact.grade.grade;sortie.messageTimer=2.5;sortie.index+=1;sortie.legStart=sortie.time;if(sortie.mission.id===3&&sortie.index===1){flight.cargo+=80;sortie.cargo=flight.cargo;sortie.cargoNote="+80 KG PATIENT"}if(objective.strip.id!=="suli"){
 sortie.stopStrip=strip}}}sortie.target=targetInfo(sortie);if(!objective.done&&objective.type==="land"&&flight.crashed){completeSortie(sortie,flight)}
 return sortie.finished}function completeSortie(sortie,flight){sortie.finished=true;sortie.result=scoreSortie(sortie,flight)}
-export function scoreSortie(sortie,flight){let objectiveTotal=0;for(const item of sortie.objectiveScores)objectiveTotal+=item.points
-;const objectiveScore=sortie.objectiveScores.length>0?objectiveTotal/sortie.objectiveScores.length:0;const timeLeft=Math.max(0,sortie.mission.par-sortie.time)
-;const timeBonus=30*(timeLeft/sortie.mission.par);const fuelBonus=20*(flight.fuel/Math.max(1,flight.fuelStart))
-;const damagePenalty=.8*(100-(flight.damage.engine+flight.damage.leftWing+flight.damage.rightWing+flight.damage.tail+flight.damage.gear+flight.damage.tank)/6)
-;const total=Math.max(0,objectiveScore+timeBonus+fuelBonus-damagePenalty);const{gold:gold,silver:silver,bronze:bronze}=sortie.mission
-;const grade=total>=gold?"GOLD":total>=silver?"SILVER":total>=bronze?"BRONZE":"NONE";return{objectiveScore:objectiveScore,timeBonus:timeBonus,
+export function scoreSortie(sortie,flight){let objectiveTotal=0;for(const item of sortie.objectiveScores)objectiveTotal+=item.points;const objectiveScore=sortie.objectiveScores.length>0?objectiveTotal/sortie.objectiveScores.length:0;const timeLeft=Math.max(0,sortie.mission.par-sortie.time);const timeBonus=30*(timeLeft/sortie.mission.par);const fuelBonus=20*(flight.fuel/Math.max(1,flight.fuelStart));const damagePenalty=.8*(100-(flight.damage.engine+flight.damage.leftWing+flight.damage.rightWing+flight.damage.tail+flight.damage.gear+flight.damage.tank)/6);const total=Math.max(0,objectiveScore+timeBonus+fuelBonus-damagePenalty);const{gold:gold,silver:silver,bronze:bronze}=sortie.mission;const grade=total>=gold?"GOLD":total>=silver?"SILVER":total>=bronze?"BRONZE":"NONE";return{objectiveScore:objectiveScore,timeBonus:timeBonus,
 fuelBonus:fuelBonus,damagePenalty:damagePenalty,total:total,grade:grade,
-postmark:grade==="GOLD"?"GOLD":grade==="SILVER"?"SILVER":grade==="BRONZE"?"BRONZE":"RETURNED"}}export function contactStrip(contact){return contact?.strip??null
-}
+postmark:grade==="GOLD"?"GOLD":grade==="SILVER"?"SILVER":grade==="BRONZE"?"BRONZE":"RETURNED"}}export function contactStrip(contact){return contact?.strip??null}

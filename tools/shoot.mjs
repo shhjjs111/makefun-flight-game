@@ -83,6 +83,7 @@ function parseCommandLine(argv) {
     output: SCREENSHOT_DIR,
     browser: process.env.CHROME_PATH ?? null,
     scenes: null,
+    ui: false,
   };
   const inlineScenes = [];
 
@@ -96,6 +97,8 @@ function parseCommandLine(argv) {
       settings.scenes = readShotsFromFile(optionValue(argv, (index += 1), '--shots'));
     } else if (argument === '--shot') {
       inlineScenes.push(parseShotArgument(optionValue(argv, (index += 1), '--shot')));
+    } else if (argument === '--ui') {
+      settings.ui = true;
     } else if (argument === '--browser') {
       settings.browser = optionValue(argv, (index += 1), '--browser');
     } else if (argument === '--help' || argument === '-h') {
@@ -107,7 +110,8 @@ function parseCommandLine(argv) {
   }
 
   if (inlineScenes.length > 0) settings.scenes = inlineScenes;
-  if (settings.scenes === null) settings.scenes = readShotsFromFile(SCENE_FILE);
+  if (settings.scenes === null && !settings.ui) settings.scenes = readShotsFromFile(SCENE_FILE);
+  if (settings.scenes === null) settings.scenes = [];
   settings.base = new URL(settings.base).href;
   return settings;
 }
@@ -284,6 +288,66 @@ async function capture(devtools, scene, base, outputDir) {
   return { path, bytes: jpeg.length, info };
 }
 
+
+/** The paper screens a player can reach, as key sequences from the title, for the UI smoke test. */
+const UI_SCENES = [
+  { file: 'ui-1-title.jpg', keys: [] },
+  { file: 'ui-2-board.jpg', keys: ['KeyB'] },
+  { file: 'ui-3-brief.jpg', keys: ['KeyB', 'Enter'] },
+  { file: 'ui-4-help.jpg', keys: ['KeyH'] },
+  { file: 'ui-5-paused.jpg', keys: ['KeyB', 'Enter', 'Enter', 'KeyP'] },
+  {
+    file: 'ui-6-debrief.jpg',
+    keys: ['KeyB', 'Enter', 'Enter'],
+    script: "__game.result={postmark:'GOLD',grade:'GOLD',total:112,lines:['LAND TAMSEN 27  +100  (greased)','TIME +12   FUEL +18   DAMAGE -0']};__game.phase='debrief';",
+  },
+  {
+    file: 'ui-7-crash.jpg',
+    keys: ['KeyB', 'Enter', 'Enter'],
+    script: "__game.crashTimer=0.62;__game.crashCause='the undercarriage collapsed on the strip';",
+  },
+];
+
+const KEYS = {
+  KeyB: { code: 'KeyB', key: 'b', windowsVirtualKeyCode: 66 },
+  KeyH: { code: 'KeyH', key: 'h', windowsVirtualKeyCode: 72 },
+  KeyP: { code: 'KeyP', key: 'p', windowsVirtualKeyCode: 80 },
+  Enter: { code: 'Enter', key: 'Enter', windowsVirtualKeyCode: 13, text: '\r' },
+};
+
+
+async function pressKey(devtools, name) {
+  const press = KEYS[name];
+  if (!press) throw new Error(`no key definition for ${name}`);
+  await devtools.send('Input.dispatchKeyEvent', { type: 'keyDown', ...press });
+  await devtools.send('Input.dispatchKeyEvent', { type: 'keyUp', ...press });
+  await delay(320);
+}
+
+/** Navigate to the playing page, walk a key sequence and capture the viewport as a JPEG. */
+async function captureUi(devtools, scene, base, outputDir) {
+  const url = new URL(base).href;
+  await devtools.send('Page.navigate', { url: 'about:blank' });
+  await delay(120);
+  await devtools.send('Page.navigate', { url });
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const state = await devtools.evaluate('({ booted: Boolean(window.__game), error: window.__bootError ?? null })');
+    if (state?.error) throw new Error(`page boot error: ${state.error}`);
+    if (state?.booted) break;
+    await delay(120);
+  }
+  await delay(900);
+  for (const key of scene.keys) await pressKey(devtools, key);
+  if (scene.script) await devtools.evaluate(scene.script);
+  await delay(420);
+  const result = await devtools.send('Page.captureScreenshot', { format: 'jpeg', quality: 88 });
+  const jpeg = Buffer.from(result.data, 'base64');
+  if (jpeg.length === 0) throw new Error('empty screenshot');
+  writeFileSync(join(outputDir, scene.file), jpeg);
+  return { file: scene.file, bytes: jpeg.length };
+}
+
 async function run() {
   let settings;
   try {
@@ -345,6 +409,18 @@ async function run() {
       } catch (error) {
         failures += 1;
         process.stderr.write(`shoot: ${scene.file}: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
+
+    if (settings.ui) {
+      for (const scene of UI_SCENES) {
+        try {
+          const shot = await captureUi(devtools, scene, settings.base, settings.output);
+          process.stdout.write(`shoot: ${shot.file} ${Math.round(shot.bytes / 1024)} KiB (ui)\n`);
+        } catch (error) {
+          failures += 1;
+          process.stderr.write(`shoot: ${scene.file}: ${error instanceof Error ? error.message : String(error)}\n`);
+        }
       }
     }
 

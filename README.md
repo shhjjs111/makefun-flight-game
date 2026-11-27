@@ -5,8 +5,9 @@
 [![reward](https://make.fun/badge/best-flight-game-20261126-0057/shhjjs111/makefun-flight-game/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
 
 The last airmail run into the Kharun Highlands before the rains close the pass. You fly **KP-04**, a
-strut-braced high-wing mail plane, for the Kharun Post: six sorties over the same 6.1 km valley,
-from a dawn mail landing to the last two sacks through a storm at night.
+strut-braced high-wing mail plane, for the Kharun Post: seven sorties over the same 6.1 km valley,
+from a dawn mail landing to a search-and-escort up the ridge in a storm: find a downed relief
+flight's beacon, hold an orbit over the wreck, flare it, and lead two survivors down to Tamsen.
 
 A make.fun entry for `best-flight-game-20261126-0057`: plain static files, desktop Chrome, keyboard
 and mouse, no build step, no network request, no external assets. Terrain, aircraft, instruments,
@@ -32,14 +33,14 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 | F | flaps: up, 10°, 20°, 35° |
 | G | landing gear |
 | B | brakes on the ground |
-| Space | drop the mail sack |
+| Space | drop the mail sack, or the flare |
 | M | lean the mixture: 15% less fuel, 10% less power |
 | C | chase / cockpit view |
 | L | panel flood |
 | K | mute |
 | P / H | pause / help |
 
-## The six sorties
+## The seven sorties
 
 1. **First Light Mail** — land Tamsen Ridge, deliver, return to Suli. Dawn, clear.
 2. **The Tea Drop** — three ring drops at Upper Tamsen, Maru and Nimra. No landing, 6 m/s gust.
@@ -47,6 +48,9 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 4. **The Broken Bridge** — four crate drops into a 40 m ring in the lee downdraft.
 5. **Eyes on the Pass** — four photo gates over Dzong, cloud base 2,700 m.
 6. **Last Mail Before the Rain** — two drops then a night landing at Suli in a 12 m/s crosswind.
+7. **Beacon in the Storm** — a relief flight is down on Tamsen's north shoulder. Find the beacon
+   (signal, range, orbit), put a flare on the wreck, then shadow the two survivors down the mule
+   track and land Tamsen to take them out. The beacon battery is the clock.
 
 ## Flight model and systems
 
@@ -58,12 +62,22 @@ tank) degrade thrust, roll trim, pitch authority, gear and fuel, and a structura
 breaks the aircraft up. `landing.js` grades every contact as GREASED, FIRM, HEAVY or CRASH from sink
 rate, bank, centreline offset and speed, and names the cause on the postcard.
 
+## The hunt and the scope
+
+The seventh sortie adds a target the other six do not have. `hunt.js` owns the wreck site on the
+ridge, the beacon's signal (strength, range, bearing, a 13-minute battery), the orbit that finds the
+survivors and their walk down the mule track, which only continues while KP-04 is overhead. The HUD
+prints the signal as a five-cell bar and the panel repeats it beside a `LOCK` lamp. `radar.js` draws
+the whole valley as a 6 km chart on the panel: relief sampled once from the terrain's own height
+field, the four strips, the aircraft's flown track, the beacon and this leg's target.
+
 ## Layout
 
 - `game/index.html` — two stacked 1280×800 canvases, one module script, nothing else
 - `game/styles.css` — the letterboxed 16:10 stage and hidden cursor
-- `game/src/` — 15 modules: `flight-model`, `terrain`, `aircraft`, `camera`, `hud`, `missions`,
-  `landing`, `render`, `instruments`, `input`, `audio`, `sky`, `world`, `attract`, `util`
+- `game/src/` — 17 modules: `flight-model`, `terrain`, `aircraft`, `camera`, `hud`, `missions`,
+  `hunt`, `radar`, `landing`, `render`, `instruments`, `input`, `audio`, `sky`, `world`, `attract`,
+  `util`
 - `screenshots/` — four real 1280×800 renders; the first by name is the cover
 - `shots.json` — the four capture queries
 - `main.ts`, `serve.ts`, `vendor/makefun-game.ts` — the kit's hand-in program and static server
@@ -71,6 +85,7 @@ rate, bank, centreline offset and speed, and names the cause on the postcard.
 ## Captures
 
 `?shot=cover|drop|storm|touchdown&seed=7` stages the real flight model with a scripted pilot from a
-fixed seed and freezes on a state predicate. `tools/shoot.mjs` drives headless Edge/Chrome over the
+fixed seed and freezes on a state predicate; the cover is the beacon run, low over the ridge with
+the wreck ring, its smoke and a lit annunciator. `tools/shoot.mjs` drives headless Edge/Chrome over the
 DevTools protocol, waits for `window.__shotReady`, and writes the game's own JPEG. `shots.json`
 names the four finals.
