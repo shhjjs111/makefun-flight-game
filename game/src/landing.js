@@ -1,16 +1,8 @@
-// The ground: touchdown detection, the landing grade the postcard prints, the rollout after contact
-// and the plain-language cause of a crash. A landing is a measurement, not an animation: sink rate,
-// bank, centreline offset and speed are read from the flight state at the moment the wheels touch.
+// The ground: touchdown detection, the landing grade, the rollout and the plain cause of a crash.
 import{clamp}from'./util.js';
 const CLEARANCE=1.55;
 
-export function stripAt(strips,x,z){
-for(const strip of strips){
-const lateral=z-strip.z;
-const along=strip.x-x;
-if(Math.abs(lateral)<=strip.width/2+2&&Math.abs(along)<=strip.length/2+6){
-return{strip,offset:lateral,along};}}
-return null;}
+function stripAt(strips,x,z){for(const strip of strips){const lateral=z-strip.z,along=strip.x-x;if(Math.abs(lateral)<=strip.width/2+2&&Math.abs(along)<=strip.length/2+6)return{strip,offset:lateral,along}}return null}
 export function groundContact(flight,env){
 if(flight.onGround||flight.crashed)return null;
 const ground=env.groundHeight(flight.p.x,flight.p.z);

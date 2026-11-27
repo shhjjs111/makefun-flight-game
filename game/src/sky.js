@@ -1,6 +1,4 @@
-// Sky and weather: a fullscreen gradient with sun, two drifting cloud decks and a storm wall,
-// plus the wind field every other system samples. Weather is a small state machine: clear, gust,
-// squall, storm, dawn or night light, and the ridge lift/downdraft that comes from the terrain.
+// Sky and weather: gradient, sun, cloud decks, the storm wall and the wind field all else samples.
 import{clamp,hex,makeRng}from'./util.js';
 import{heightAt}from'./terrain.js';
 export const WEATHER={

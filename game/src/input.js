@@ -1,7 +1,4 @@
-// Keyboard and mouse to aircraft controls: the mouse is an absolute virtual stick with a dead zone
-// and expo curve, every action also has a key, and one-shot presses are queued as flags so nothing
-// is lost between frames. The cursor is hidden while flying, so the stick and the horizon are the
-// only pointers the pilot needs.
+// Keyboard and mouse to aircraft controls: an absolute virtual stick, keys, queued one-shots.
 import{clamp}from'./util.js';
 export const ACTION_DROP=1;
 export const ACTION_FLAP=2;

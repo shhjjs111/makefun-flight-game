@@ -1,5 +1,4 @@
-// Maths for Monsoon Post: scalars, noise, vectors, quaternions, matrices and a tiny flat-shaded
-// mesh builder. Nothing here knows what a game is; every other module builds on it.
+// Maths for Monsoon Post: noise, vectors, quaternions, matrices and a flat-shaded mesh builder.
 export function clamp(value,low,high){
 return value<low?low:value>high?high:value;}
 export function lerp(a,b,t){

@@ -75,7 +75,7 @@ field, the four strips, the aircraft's flown track, the beacon and this leg's ta
 
 - `game/index.html` — two stacked 1280×800 canvases, one module script, nothing else
 - `game/styles.css` — the letterboxed 16:10 stage and hidden cursor
-- `game/src/` — 17 modules: `flight-model`, `terrain`, `aircraft`, `camera`, `hud`, `missions`,
+- `game/src/` — 18 modules: `main`, `flight-model`, `terrain`, `aircraft`, `camera`, `hud`, `missions`,
   `hunt`, `radar`, `landing`, `render`, `instruments`, `input`, `audio`, `sky`, `world`, `attract`,
   `util`
 - `screenshots/` — four real 1280×800 renders; the first by name is the cover
@@ -85,7 +85,9 @@ field, the four strips, the aircraft's flown track, the beacon and this leg's ta
 ## Captures
 
 `?shot=cover|drop|storm|touchdown&seed=7` stages the real flight model with a scripted pilot from a
-fixed seed and freezes on a state predicate; the cover is the beacon run, low over the ridge with
-the wreck ring, its smoke and a lit annunciator. `tools/shoot.mjs` drives headless Edge/Chrome over the
-DevTools protocol, waits for `window.__shotReady`, and writes the game's own JPEG. `shots.json`
-names the four finals.
+fixed seed and freezes on a state predicate; the cover is the beacon hunt, banked in over the ridge
+with the wreck burning inside the drop ring, its smoke column and a lit `FUEL 10 MIN`. The other three
+are a tea drop in a 45° bank, a squall pass through gate 2 from the cockpit, and a spray-throwing
+touchdown on the wet Nimra strip. `tools/shoot.mjs` drives headless Edge/Chrome over the DevTools
+protocol, waits for `window.__shotReady`, and writes the game's own JPEG. `shots.json` names the four
+finals.
